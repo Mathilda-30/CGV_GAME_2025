@@ -21,3 +21,4 @@ function goToLevel3() {
 
 // Start by showing the menu and pass goToLevel1 as the callback
 showMenu(goToLevel1);
+//goToLevel3(); // Directly start level 3 for testing
