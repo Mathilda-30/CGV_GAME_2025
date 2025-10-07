@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { keys } from './input.js';
+import { collisionManager } from './level3Collisions.js';
 
 export let player;
 
@@ -51,27 +52,85 @@ export function initPlayer(scene) {
 }
 
 export function updatePlayer(dt) {
+  // Ladder climbing logic
+  // Ladder position and size must match the ladder in level3.js
+  // For this level: ladder at x=-20, z=-17, y=7.3, height=3.5
+  const ladderX = -20, ladderZ = -17, ladderBaseY = 7.3, ladderHeight = 3.5;
+  const ladderRadius = 1.0; // How close player must be to climb
+  const playerPos = player.mesh.position;
+  const nearLadder =
+    Math.abs(playerPos.x - ladderX) < ladderRadius &&
+    Math.abs(playerPos.z - ladderZ) < ladderRadius &&
+    playerPos.y >= ladderBaseY - 1 && playerPos.y <= ladderBaseY + ladderHeight + 1;
+
+  let climbing = false;
+  if (nearLadder && keys['e']) {
+    climbing = true;
+    // Disable gravity while climbing
+    player.velocity.y = 0;
+    // Move up or down with W/S
+    if (keys['w']) {
+      player.mesh.position.y += player.speed * dt * 0.7; // Climb up
+    } else if (keys['s']) {
+      player.mesh.position.y -= player.speed * dt * 0.7; // Climb down
+    }
+    // Clamp to ladder range
+    if (player.mesh.position.y < ladderBaseY) player.mesh.position.y = ladderBaseY;
+    if (player.mesh.position.y > ladderBaseY + ladderHeight) player.mesh.position.y = ladderBaseY + ladderHeight;
+  }
   if (!player) return;
 
-  const dir = new THREE.Vector3();
-  if (keys['w']) dir.z -= 1;
-  if (keys['s']) dir.z += 1;
-  if (keys['a']) dir.x -= 1;
-  if (keys['d']) dir.x += 1;
 
-  // Horizontal movement
-  dir.normalize().multiplyScalar(player.speed * dt);
-  player.mesh.position.add(dir);
+  // Movement relative to player facing (yaw)
+  const move = new THREE.Vector3();
+  if (keys['w']) move.z -= 1;
+  if (keys['s']) move.z += 1;
+  if (keys['a']) move.x -= 1;
+  if (keys['d']) move.x += 1;
+  let attemptedMove = null;
+  if (move.lengthSq() > 0) {
+    move.normalize();
+    // Rotate move vector by player yaw
+    const yaw = player.mesh.rotation.y;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    const forward = new THREE.Vector3(
+      move.x * cos - move.z * sin,
+      0,
+      move.x * sin + move.z * cos
+    );
+    forward.multiplyScalar(player.speed * dt);
+    attemptedMove = forward;
+    player.mesh.position.add(forward);
+  }
 
-  // Jump and gravity
-  const gravity = -9.81; // Earth-like gravity
-  player.velocity.y += gravity * dt;
-  player.mesh.position.y += player.velocity.y * dt;
+  // Jump and gravity (skip gravity if climbing)
+  if (!climbing) {
+    const gravity = -9.81; // Earth-like gravity
+    player.velocity.y += gravity * dt;
+    player.mesh.position.y += player.velocity.y * dt;
+  }
 
-  // Update player bounding box
+  // Update player bounding box before collision check
   player.bbox.setFromObject(player.mesh);
 
-  // Collision detection with platforms (from level3.js staircase)
+  // Collision check and resolution
+  const collisionResult = collisionManager.checkCollisions(
+    player.bbox,
+    player.mesh.position,
+    player.velocity
+  );
+  const isOnPlatform = collisionResult.isOnPlatform;
+
+  // If collided with a wall, revert the movement
+  if (collisionResult.wallCollision && attemptedMove) {
+    player.mesh.position.sub(attemptedMove);
+    player.bbox.setFromObject(player.mesh);
+  } else {
+    // After collision resolution, update bounding box again
+    player.bbox.setFromObject(player.mesh);
+  }
+
+ /* // Collision detection with platforms (from level3.js staircase)
   const platformHeights = [2, 4, 6, 8, 10];
   const platformPositions = platformHeights.map(h => ({
     min: new THREE.Vector3(-2.5, h - 0.25, -8.5 + (-6 * (h / 2))),
@@ -88,7 +147,7 @@ export function updatePlayer(dt) {
         isOnPlatform = true;
       }
     }
-  }
+  } 
 
   // Ground collision (main island)
   const groundLevel = 0;
@@ -102,17 +161,18 @@ export function updatePlayer(dt) {
       player.velocity.y = 0;
       isOnPlatform = true; 
     }
-  }
+  } */
 
   // Jump logic
   if (isOnPlatform) {
     if (keys['j'] && !player.isJumping) {
       player.velocity.y = 15; // Jump velocity
       player.isJumping = true;
+    } else if (!keys['j']) {
+      player.isJumping = false;
     }
   } else {
     player.isJumping = true;
   }
-
-  if (!keys['j']) player.isJumping = false;
+  if (!keys['j'] && isOnPlatform) player.isJumping = false;
 }
