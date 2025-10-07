@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { initInput, keys } from './input.js';
 import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
+import { Player } from './player2.js'; 
 
 
 
@@ -200,14 +201,8 @@ for (let i = 0; i < 10; i++) {
 
 
 
-  // === Player ===
-  const player = new THREE.Mesh(
-    new THREE.BoxGeometry(0.8, 1.2, 0.8),
-    new THREE.MeshStandardMaterial({ color: 0x00ffcc })
-  );
-  player.castShadow = true;
-  player.position.set(0, 0.6, 0);
-  scene.add(player);
+   const player = new Player(scene, new THREE.Vector3(0, 0, 0));
+  
 
   // === Crystals (Collectibles) ===
   let crystals = [];
@@ -249,27 +244,20 @@ for (let i = 0; i < 10; i++) {
     const dt = clock.getDelta();
     const time = clock.getElapsedTime();
 
-    // --- Movement ---
-    const dir = new THREE.Vector3();
-    if (keys['w']) dir.z -= 1;
-    if (keys['s']) dir.z += 1;
-    if (keys['a']) dir.x -= 1;
-    if (keys['d']) dir.x += 1;
-    dir.normalize().multiplyScalar(5 * dt);
-    player.position.add(dir);
+     player.update(dt);
 
     // --- Camera Follow ---
     camera.position.lerp(
-      player.position.clone().add(new THREE.Vector3(0, 3, 8)),
+      player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
       0.1
     );
-    camera.lookAt(player.position);
+    camera.lookAt(player.model.position);
 
     // --- Crystals Rotation + Collection ---
     crystals.forEach((c, i) => {
       if (!c) return;
       c.rotation.y += 0.02;
-      if (player.position.distanceTo(c.position) < 1) {
+      if (player.model.position.distanceTo(c.position) < 1) {
         scene.remove(c);
         crystals[i] = null;
         updateHUD(getCounter() + 1);
