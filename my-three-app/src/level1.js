@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer, isTimerPaused } from './ui.js';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import { Player } from './player2.js'; 
 
@@ -56,51 +56,7 @@ export function startLevel1(onComplete) {
   sunGlow.position.copy(sunlight.position);
   scene.add(sunGlow);
 
-
-
-  // === Clouds ===
-/*const cloudTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/cloud.png');
-const cloudMat = new THREE.SpriteMaterial({
-  map: cloudTexture,
-  transparent: true,
-  opacity: 0.6,
-  depthWrite: false,
-});
-const clouds = [];
-
-for (let i = 0; i < 20; i++) {
-  const cloud = new THREE.Sprite(cloudMat);
-  const scale = 80 + Math.random() * 120;
-  cloud.scale.set(scale, scale * 0.5, 1);
-  cloud.position.set(
-    (Math.random() - 0.5) * 400,
-    40 + Math.random() * 20,
-    (Math.random() - 0.5) * 400
-  );
-  scene.add(cloud);
-  clouds.push(cloud);
-}*/
-
-
-
-  /*const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-  sun.position.set(10, 15, 5);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  scene.add(sun);*/
-
-  // === Ground (Sand Terrain) ===
-  /*const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(80, 80, 64, 64),
-    new THREE.MeshStandardMaterial({
-      color: 0xdeb887,
-      roughness: 1,
-      metalness: 0,
-    })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);*/
+  
 
  const terrainGeometry = new THREE.PlaneGeometry(300, 300, 150, 150);
  terrainGeometry.rotateX(-Math.PI / 2);
@@ -201,25 +157,23 @@ for (let i = 0; i < 10; i++) {
 
 
 
-   const player = new Player(scene, new THREE.Vector3(0, 0, 0));
+const player = new Player(scene, new THREE.Vector3(0, 0, 0));
   
 
   // === Crystals (Collectibles) ===
-  let crystals = [];
-  const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
-  const crystalMat = new THREE.MeshStandardMaterial({
-    color: 0x00ffff,
-    emissive: 0x00ffff,
-    emissiveIntensity: 1,
-  });
-
-  const positions = [
-    [3, 0.5, -2],
-    [-4, 0.5, 1],
-    [0, 0.5, -6],
-    [6, 0.5, 3],
-    [-6, 0.5, -4],
-  ];
+let crystals = [];
+const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
+const crystalMat = new THREE.MeshStandardMaterial({
+  color: 0x00ffff,
+  emissive: 0x00ffff,
+  emissiveIntensity: 1,
+});
+const numCrystals = 5;
+const positions = Array.from({ length: numCrystals }, () => [
+  (Math.random() - 0.5) * 60,
+  0.75,
+  (Math.random() - 0.5) * 60
+]);
 
   positions.forEach((p) => {
     const c = new THREE.Mesh(crystalGeo, crystalMat.clone());
@@ -235,6 +189,12 @@ for (let i = 0; i < 10; i++) {
   resetCounter();
   showHUD();
 
+//timer 
+startTimer(15, () => {
+  endGame(false); 
+});
+
+
   const clock = new THREE.Clock();
   let animId;
 
@@ -242,7 +202,12 @@ for (let i = 0; i < 10; i++) {
   function animate() {
     animId = requestAnimationFrame(animate);
     const dt = clock.getDelta();
-    const time = clock.getElapsedTime();
+    //const time = clock.getElapsedTime();
+
+     if (isTimerPaused()) {
+    renderer.render(scene, camera);
+    return;
+  }
 
      player.update(dt);
 
@@ -271,16 +236,62 @@ for (let i = 0; i < 10; i++) {
       }
     });
 
-
     renderer.render(scene, camera);
   }
 
   animate();
 
-  function cleanup() {
+   // === End Game Logic ===
+   function endGame(win) {
+    stopTimer();
     cancelAnimationFrame(animId);
-    renderer.dispose();
+
+    const timerEl = document.getElementById('game-timer');
+    if (timerEl) timerEl.remove();
+
+    if (win) {
+      showMessage('You collected all crystals in time!');
+      setTimeout(() => {
+        cleanup();
+        onComplete?.();
+      }, 1500);
+    } else {
+      showMessage(' Time’s up! Try again.');
+      setTimeout(() => {
+        cleanup();
+        onComplete?.();
+      }, 2000);
+    }
   }
 
+  
+  function showMessage(text) {
+    const msgEl = document.createElement('div');
+    msgEl.textContent = text;
+    Object.assign(msgEl.style, {
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      padding: '20px',
+      background: 'rgba(0,0,0,0.8)',
+      color: 'white',
+      fontFamily: 'sans-serif',
+      fontSize: '24px',
+      borderRadius: '8px',
+      zIndex: 9999,
+    });
+    document.body.appendChild(msgEl);
+  }
+
+  function cleanup() {
+    cancelAnimationFrame(animId);
+   const timerEl = document.getElementById('game-timer');
+if (timerEl) timerEl.remove();
+
+    removePauseButton();
+    renderer.dispose();
+  }
+  
   return cleanup;
 }
