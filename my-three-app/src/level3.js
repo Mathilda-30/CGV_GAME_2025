@@ -2,24 +2,21 @@
 import * as THREE from 'three';
 import { initInput, keys } from './input.js';
 import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
-import { initCamera, updateCamera } from './camera.js';
+import { initCamera, updateCameraFollow } from './camera.js';
 import { initPlayer, updatePlayer, player } from './player.js';
 //import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { collisionManager } from './level3Collisions.js';
 
-export function startLevel3(onComplete) {
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87ceeb); // sky blue
 
-  const camera = initCamera();
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.shadowMap.enabled = true; // Enable shadows
-  const appDiv = document.getElementById('app');
-// Instead of just appending...
-document.body.innerHTML = ""; // 🔥 clears old canvas + HUD
-document.body.appendChild(renderer.domElement);
+export function startLevel3(onComplete) {
+ 
+// Scene setup
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0a08);
+scene.fog = new THREE.FogExp2(0x0b0a08, 0.028);
+
+const { camera, renderer, controls } = initCamera(scene);
+
 
   // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -409,7 +406,8 @@ addMovingPlatform(-30, 7, -30, 1.5, 7); // Platform 3
     updatePlayer(dt);
 
     // Update camera to follow player with 360-degree orbit
-    updateCamera(camera, dt);
+    updateCameraFollow(camera, player?.model, DEBUG);
+
 
     // Animate crystals
     crystals.forEach((c, i) => {
@@ -439,4 +437,4 @@ addMovingPlatform(-30, 7, -30, 1.5, 7); // Platform 3
   }
 
   return cleanup;
-}
+} 

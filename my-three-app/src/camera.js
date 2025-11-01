@@ -1,68 +1,85 @@
+// src/camera.js
 import * as THREE from 'three';
-import { player } from './player.js';
-import { keys } from './input.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-let camera;
-let yaw = 0; // Horizontal rotation (y-axis)
-let pitch = 0; // Vertical rotation (x-axis)
-const radius = 10; // Distance from player
-const minPitch = -Math.PI / 2 + 0.1; 
-const maxPitch = Math.PI / 2 - 0.1; 
-let isDragging = false;
-let previousMouseX = 0;
-let previousMouseY = 0;
+let cameraRotation = new THREE.Vector2(0, 0); // yaw (left/right), pitch (up/down)
+const rotationSpeed = 0.02;
+const minPitch = -0.6;
+const maxPitch = 0.6;
 
-export function initCamera() {
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  updateCameraPosition();
-  return camera;
-}
+/**
+ * Initializes and returns a PerspectiveCamera, renderer, and OrbitControls.
+ * @param {THREE.Scene} scene - The scene to render.
+ * @returns {{ camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, controls: OrbitControls }}
+ */
+export function initCamera(scene) {
+    const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+    camera.position.set(0, 5, 14);
 
-export function updateCamera(camera, dt) {
-  if (!player) return;
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Handle mouse drag for rotation (horizontal with left click, vertical with right click)
-  document.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    previousMouseX = e.clientX;
-    previousMouseY = e.clientY;
-  });
-  document.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-      const deltaX = e.clientX - previousMouseX;
-      const deltaY = e.clientY - previousMouseY;
-      yaw += deltaX * 0.005; // Adjust sensitivity
-      pitch -= deltaY * 0.005; // Invert vertical movement
-      pitch = THREE.MathUtils.clamp(pitch, minPitch, maxPitch);
-      previousMouseX = e.clientX;
-      previousMouseY = e.clientY;
-      updateCameraPosition();
+    document.body.innerHTML = '';
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enabled = false; // disable for gameplay
+
+    // Handle window resize
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
     }
-  });
-  document.addEventListener('mouseup', () => {
-    isDragging = false;
-  });
-  document.addEventListener('mouseleave', () => {
-    isDragging = false;
-  });
+    window.addEventListener('resize', onResize);
 
-  // Optional keyboard rotation (arrow keys)
-  if (keys['arrowleft']) yaw -= 1 * dt;
-  if (keys['arrowright']) yaw += 1 * dt;
-  if (keys['arrowup']) pitch = Math.max(pitch - 1 * dt, minPitch);
-  if (keys['arrowdown']) pitch = Math.min(pitch + 1 * dt, maxPitch);
-  updateCameraPosition();
+    // --- Arrow Key Controls for Manual Rotation ---
+    window.addEventListener('keydown', (e) => {
+        switch (e.code) {
+            case 'ArrowLeft':
+                cameraRotation.x -= rotationSpeed;
+                break;
+            case 'ArrowRight':
+                cameraRotation.x += rotationSpeed;
+                break;
+            case 'ArrowUp':
+                cameraRotation.y = Math.min(maxPitch, cameraRotation.y + rotationSpeed);
+                break;
+            case 'ArrowDown':
+                cameraRotation.y = Math.max(minPitch, cameraRotation.y - rotationSpeed);
+                break;
+        }
+    });
+
+    return { camera, renderer, controls };
 }
 
-function updateCameraPosition() {
-  if (!player) return;
+/**
+ * Smoothly follows a target (usually the player model)
+ */
+export function updateCameraFollow(camera, target, DEBUG = false) {
+    if (target) {
+        // Orbit around target using cameraRotation.x (yaw) and cameraRotation.y (pitch)
+        const distance = 8.0;
+        const offset = new THREE.Vector3(
+            Math.sin(cameraRotation.x) * distance,
+            3.0 + cameraRotation.y * 5.0, // vertical offset with pitch
+            Math.cos(cameraRotation.x) * distance
+        );
 
-  const playerPos = player.mesh.position;
-  const offset = new THREE.Vector3(
-    radius * Math.sin(yaw) * Math.cos(pitch),
-    radius * Math.sin(pitch),
-    radius * Math.cos(yaw) * Math.cos(pitch)
-  );
-  camera.position.copy(playerPos).add(offset);
-  camera.lookAt(playerPos);
+        const desiredPosition = target.position.clone().add(offset);
+        camera.position.lerp(desiredPosition, 0.12);
+        camera.lookAt(target.position);
+
+        if (DEBUG) console.log('Camera follow pos:', target.position);
+    }
 }

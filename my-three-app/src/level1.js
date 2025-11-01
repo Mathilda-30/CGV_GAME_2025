@@ -1,34 +1,129 @@
 import * as THREE from 'three';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer } from './ui.js';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import { Player } from './player2.js'; 
-
+import { initCamera, updateCameraFollow } from './camera.js';
+import { createCrystals, updateCrystals } from './crystal.js';
+import { showMenu } from './menu.js';
 
 
 export function startLevel1(onComplete) {
+  const DEBUG = false;
   // === Scene Setup ===
   const scene = new THREE.Scene();
   // --- Realistic blue sky gradient + fog ---
   scene.background = new THREE.Color(0x87ceeb); // clear sky blue
   scene.fog = new THREE.Fog(0xe6c79c, 30, 120);
 
+const { camera, renderer, controls } = initCamera(scene);
+// -------------------------
+// 🔊 Global Background Sound (Level 2)
+// -------------------------
+const listener = new THREE.AudioListener();
+const sound = new THREE.Audio(listener);
 
-  const camera = new THREE.PerspectiveCamera(
-    75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 10, 30);
+// Add the listener to the camera so 3D sound works properly
+camera.add(listener);
 
-  // === Renderer ===
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  document.body.innerHTML = ''; // clear old canvas + UI
-  document.body.appendChild(renderer.domElement);
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load('./sound/Desert_sound.mp3', buffer => {
+    sound.setBuffer(buffer);
+    sound.setLoop(true);          // keep replaying forever
+    sound.setVolume(0.5);         // adjust loudness (0.0–1.0)
+    sound.play();
+}, undefined, err => {
+    console.error('Error loading Desert_sound.mp3:', err);
+});
 
+
+resetCounter();
+showHUD();
+
+startTimer(180, () => {
+  console.log("Time’s up!");
+  cleanup();
+  stopTimer();
+
+  // === Popup Overlay ===
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    background: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontFamily: 'sans-serif',
+    zIndex: 10000,
+  });
+
+  const box = document.createElement('div');
+  Object.assign(box.style, {
+    background: 'rgba(0, 0, 0, 0.85)',
+    padding: '30px 50px',
+    borderRadius: '16px',
+    textAlign: 'center',
+    boxShadow: '0 0 20px rgba(255,255,255,0.3)',
+  });
+
+  const msg = document.createElement('h2');
+  msg.textContent = '⏰ Time’s Up!';
+  msg.style.marginBottom = '20px';
+
+  const restartBtn = document.createElement('button');
+  restartBtn.textContent = '🔁 Restart Level';
+  Object.assign(restartBtn.style, {
+    padding: '10px 20px',
+    margin: '10px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    border: 'none',
+    borderRadius: '8px',
+    background: '#4CAF50',
+    color: 'white',
+  });
+
+  const menuBtn = document.createElement('button');
+  menuBtn.textContent = '🏠 Go to Menu';
+  Object.assign(menuBtn.style, {
+    padding: '10px 20px',
+    margin: '10px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    border: 'none',
+    borderRadius: '8px',
+    background: '#f44336',
+    color: 'white',
+  });
+
+  // === Button Actions ===
+  restartBtn.addEventListener('click', () => {
+    overlay.remove();
+    startLevel1(onComplete);
+  });
+
+  menuBtn.addEventListener('click', () => {
+    overlay.remove();
+    cleanup();
+    showMenu(() => startLevel1(onComplete)); // Return to menu
+  });
+
+  box.appendChild(msg);
+  box.appendChild(restartBtn);
+  box.appendChild(menuBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+});
+
+
+
+  
   // === Lighting ===
   const sunlight = new THREE.DirectionalLight(0xffffff, 1.4);
   sunlight.position.set(10, 15, 5);
@@ -133,7 +228,7 @@ for (let i = 0; i < 20; i++) {
 
   const terrain = new THREE.Mesh(terrainGeometry, sandMaterial);
   terrain.receiveShadow = true;
-  scene.add(terrain);
+  scene.add(terrain); 
 
   // === ROCKS ===
   const rockGeo = new THREE.IcosahedronGeometry(0.6, 1);
@@ -202,38 +297,14 @@ for (let i = 0; i < 10; i++) {
 
 
    const player = new Player(scene, new THREE.Vector3(0, 0, 0));
+    player.camera = camera; // attach camera for relative movement
   
 
-  // === Crystals (Collectibles) ===
-  let crystals = [];
-  const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
-  const crystalMat = new THREE.MeshStandardMaterial({
-    color: 0x00ffff,
-    emissive: 0x00ffff,
-    emissiveIntensity: 1,
-  });
-
-  const positions = [
-    [3, 0.5, -2],
-    [-4, 0.5, 1],
-    [0, 0.5, -6],
-    [6, 0.5, 3],
-    [-6, 0.5, -4],
-  ];
-
-  positions.forEach((p) => {
-    const c = new THREE.Mesh(crystalGeo, crystalMat.clone());
-    c.position.set(...p);
-    c.castShadow = true;
-    scene.add(c);
-    crystals.push(c);
-  });
-
+  const { crystals, crystalPositions } = createCrystals(scene);
 
   // === Input + HUD ===
   initInput();
-  resetCounter();
-  showHUD();
+  
 
   const clock = new THREE.Clock();
   let animId;
@@ -244,37 +315,31 @@ for (let i = 0; i < 10; i++) {
     const dt = clock.getDelta();
     const time = clock.getElapsedTime();
 
-     player.update(dt);
+    player.update(dt);
 
     // --- Camera Follow ---
     camera.position.lerp(
-      player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
-      0.1
+        player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
+        0.1
     );
     camera.lookAt(player.model.position);
 
-    // --- Crystals Rotation + Collection ---
-    crystals.forEach((c, i) => {
-      if (!c) return;
-      c.rotation.y += 0.02;
-      if (player.model.position.distanceTo(c.position) < 1) {
-        scene.remove(c);
-        crystals[i] = null;
-        updateHUD(getCounter() + 1);
-        if (getCounter() + 1 === positions.length) {
-          // Level Complete
-          setTimeout(() => {
-            cleanup();
-            onComplete();
-          }, 800);
-        }
-      }
-    });
-
-
-    renderer.render(scene, camera);
+    // Replace crystal update code with:
+    updateCrystals(crystals, player, scene, (i) => {
+  updateHUD(getCounter() + 1);
+  if (getCounter() === crystalPositions.length) {
+    stopTimer(); // stop the countdown when all crystals collected
+    setTimeout(() => {
+      cleanup();
+      onComplete();
+    }, 600);
   }
+});
 
+
+    updateCameraFollow(camera, player?.model, DEBUG);
+    renderer.render(scene, camera);
+}
   animate();
 
   function cleanup() {
