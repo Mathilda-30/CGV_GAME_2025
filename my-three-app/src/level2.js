@@ -1,42 +1,137 @@
 // src/level2.js
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { Water } from 'three/examples/jsm/objects/Water.js';
 import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer } from './ui.js';
 import { Player } from './player2.js';
+import { initCamera, updateCameraFollow } from './camera.js';
+import { createCrystals, updateCrystals } from './crystal.js';
+import { showMenu } from './menu.js';
+
+
 
 export function startLevel2(onComplete) {
     // Toggle this to true to enable debug helpers (bounding boxes, logs)
     const DEBUG = false;
 
-    // -------------------------
-    // Scene / Camera / Renderer
-    // -------------------------
+    // Scene setup
     const scene = new THREE.Scene();
+
+    
+
+    
     scene.background = new THREE.Color(0x0b0a08);
     scene.fog = new THREE.FogExp2(0x0b0a08, 0.028);
 
-    const camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1000
-    );
-    camera.position.set(0, 5, 14);
+    const { camera, renderer, controls } = initCamera(scene);
+    // -------------------------
+// 🔊 Global Background Sound (Level 2)
+// -------------------------
+const listener = new THREE.AudioListener();
+const sound = new THREE.Audio(listener);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.innerHTML = '';
-    document.body.appendChild(renderer.domElement);
+// Add the listener to the camera so 3D sound works properly
+camera.add(listener);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.enabled = false; // disabled for gameplay
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load('./sound/level2-sound.mp3', buffer => {
+    sound.setBuffer(buffer);
+    sound.setLoop(true);          // keep replaying forever
+    sound.setVolume(0.5);         // adjust loudness (0.0–1.0)
+    sound.play();
+}, undefined, err => {
+    console.error('Error loading level2-sound.mp3:', err);
+});
+
+
+resetCounter();
+    showHUD();
+    
+   startTimer(180, () => {
+  console.log("Time’s up!");
+  stopTimer();
+  cancelAnimationFrame(animId); // stop rendering
+  renderer.domElement.style.filter = 'blur(6px)'; // optional blur
+
+  // === Popup Overlay ===
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    background: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontFamily: 'sans-serif',
+    zIndex: 99999, // very high to ensure it's visible
+  });
+
+  const box = document.createElement('div');
+  Object.assign(box.style, {
+    background: 'rgba(0, 0, 0, 0.85)',
+    padding: '30px 50px',
+    borderRadius: '16px',
+    textAlign: 'center',
+    boxShadow: '0 0 20px rgba(255,255,255,0.3)',
+  });
+
+  const msg = document.createElement('h2');
+  msg.textContent = '⏰ Time’s Up!';
+  msg.style.marginBottom = '20px';
+
+  const restartBtn = document.createElement('button');
+  restartBtn.textContent = '🔁 Restart Level';
+  Object.assign(restartBtn.style, {
+    padding: '10px 20px',
+    margin: '10px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    border: 'none',
+    borderRadius: '8px',
+    background: '#4CAF50',
+    color: 'white',
+  });
+
+  const menuBtn = document.createElement('button');
+  menuBtn.textContent = '🏠 Go to Menu';
+  Object.assign(menuBtn.style, {
+    padding: '10px 20px',
+    margin: '10px',
+    fontSize: '18px',
+    cursor: 'pointer',
+    border: 'none',
+    borderRadius: '8px',
+    background: '#f44336',
+    color: 'white',
+  });
+
+  restartBtn.addEventListener('click', () => {
+    overlay.remove();
+    cleanup();
+    renderer.domElement.style.filter = ''; // remove blur
+    startLevel2(onComplete);
+  });
+
+  menuBtn.addEventListener('click', () => {
+    overlay.remove();
+    cleanup();
+    renderer.domElement.style.filter = '';
+    showMenu(() => startLevel2(onComplete));
+  });
+
+  box.appendChild(msg);
+  box.appendChild(restartBtn);
+  box.appendChild(menuBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+});
+
 
     // -------------------------
     // Lights (ambient + sun + global)
@@ -59,7 +154,7 @@ export function startLevel2(onComplete) {
     // Textures & normals
     // -------------------------
     const textureLoader = new THREE.TextureLoader();
-    const floorTexture = textureLoader.load('./textures/rock.jpeg');
+    const floorTexture = textureLoader.load('./textures/cave.jpg');
     floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
     floorTexture.repeat.set(12, 12);
 
@@ -73,11 +168,11 @@ export function startLevel2(onComplete) {
         wallNormal.wrapS = wallNormal.wrapT = THREE.RepeatWrapping;
         wallNormal.repeat.set(6, 3);
 
-        floorNormal = textureLoader.load('./textures/rock.jpeg');
+        floorNormal = textureLoader.load('./textures/cave.jpg');
         floorNormal.wrapS = floorNormal.wrapT = THREE.RepeatWrapping;
         floorNormal.repeat.set(12, 12);
 
-        rockNormalMap = textureLoader.load('./textures/rock.jpeg');
+        rockNormalMap = textureLoader.load('./textures/cave.jpg');
         rockNormalMap.wrapS = rockNormalMap.wrapT = THREE.RepeatWrapping;
         rockNormalMap.repeat.set(2, 2);
     } catch (e) {
@@ -125,11 +220,97 @@ export function startLevel2(onComplete) {
     floor.name = 'ground_floor';
     scene.add(floor);
 
+    
+
+ // -------------------------
+// Falling Rocks (same style as stationary rocks)
+// -------------------------
+
+const newObstacles = []; // <-- declare BEFORE using it
+
+const fallingRocks = [];
+const rockTex = textureLoader.load('./textures/cave.jpg');
+const fallingRockPositions = [
+    [-6, 2], [4, 0], [10, -3], [-10, -5], [0, -10],
+    [5, -8], [-8, -2], [12, -6], [-12, 3], [2, -12]
+];
+
+// Use the same material/texture as stationary rocks
+const fallingRockMatProto = new THREE.MeshStandardMaterial({
+    map: rockTex,         // same texture as stationary rocks
+    normalMap: rockNormalMap,
+    roughness: 0.95,
+    metalness: 0.05
+});
+
+fallingRockPositions.forEach((pos, i) => {
+    const size = 0.5 + Math.random() * 0.7; // smaller or varied sizes than stationary rocks
+    const geo = new THREE.SphereGeometry(size, 12, 12);
+    addNoiseToGeometry(geo, 3.0, 0.4);
+    geo.computeVertexNormals();
+
+    const mat = fallingRockMatProto.clone();
+    mat.color = new THREE.Color().setHSL(0.08, 0.15, 0.15 + (i % 5) * 0.04);
+
+    const rock = new THREE.Mesh(geo, mat);
+    rock.position.set(pos[0], 15 + Math.random() * 5, pos[1]); // spawn above scene
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    rock.visible = false; // hidden initially
+    rock.name = 'fallingRock';
+    scene.add(rock);
+
+    // initial collider
+    const collider = new THREE.Box3().setFromObject(rock);
+
+    fallingRocks.push({
+        mesh: rock,
+        collider,
+        type: 'rock',
+        falling: false,
+        triggered: false,
+        targetY: floor.position.y + 0.3,
+        delay: i * 12 // staggered fall
+    });
+
+    newObstacles.push(fallingRocks[i]);
+});
+
+
+// --- Place new obstacles in the scene ---
+
+
+
+function triggerFall() {
+    if (player.falling) return;
+    player.falling = true;
+
+    // Show popup
+    const popup = document.getElementById('popup');
+    popup.style.display = 'block';
+
+    // Start falling animation (GSAP)
+    gsap.to(player.model.position, {
+        y: -5,
+        duration: 1.2,
+        onComplete: () => {
+            // Hide popup
+            popup.style.display = 'none';
+
+            // Reset player to spawn
+            const spawnX = 0, spawnZ = 6;
+            const spawnY = player.getTerrainHeightAt(spawnX, spawnZ) + 0.3;
+            player.model.position.set(spawnX, spawnY, spawnZ);
+            player.falling = false;
+        }
+    });
+}
+
     // -------------------------
-    // Rocks (round boulders)
+    // Rocks (scattered around cave, stationary — on both sides, entrance clear)
     // -------------------------
     const rocks = [];
-    const rockTex = textureLoader.load('./textures/cave.jpg');
+    //const rockTex = textureLoader.load('./textures/cave.jpg');
     rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping;
 
     const rockMatProto = new THREE.MeshStandardMaterial({
@@ -139,21 +320,46 @@ export function startLevel2(onComplete) {
         metalness: 0.05
     });
 
-    for (let i = 0; i < 24; i++) {
-        const size = 0.6 + Math.random() * 1.6;
+    // Rocks positioned around the cave: both before (-z) and after (+z) tunnels
+    const rockPositions = [
+        // --- Front / Entrance area (z from 8 to 2) ---
+        [-18, 0.2, 10], [-15, 0.2, 8], [-12, 0.2, 11],
+        [-8, 0.2, 9], [-5, 0.2, 12], [5, 0.2, 11],
+        [8, 0.2, 9], [10, 0.2, 13], [14, 0.2, 8],
+        [17, 0.2, 10], [20, 0.2, 12], [-20, 0.2, 7],
+        [22, 0.2, 9], [-10, 0.2, 6], [12, 0.2, 6],
+
+        // --- Entrance edges (z from 2 to -6) ---
+        [-18, 0.2, 0], [-14, 0.2, -2], [-10, 0.2, -4],
+        [-6, 0.2, -5], [6, 0.2, -5], [10, 0.2, -3],
+        [14, 0.2, -2], [18, 0.2, -4], [20, 0.2, -6],
+        [-20, 0.2, -3], [-22, 0.2, -5],
+
+        // --- Mid cave (z from -8 to -14) ---
+        [-16, 0.2, -10], [-12, 0.2, -12], [-8, 0.2, -8],
+        [-4, 0.2, -12], [4, 0.2, -10], [8, 0.2, -13],
+        [12, 0.2, -9], [16, 0.2, -12], [20, 0.2, -10],
+        [-20, 0.2, -14], [22, 0.2, -13],
+
+        // --- Deep cave / tunnels (z from -16 to -24) ---
+        [-18, 0.2, -18], [-15, 0.2, -20], [-10, 0.2, -22],
+        [-6, 0.2, -19], [-2, 0.2, -23], [2, 0.2, -20],
+        [6, 0.2, -24], [10, 0.2, -21], [14, 0.2, -23],
+        [18, 0.2, -19], [20, 0.2, -22], [-22, 0.2, -18],
+        [-24, 0.2, -20], [22, 0.2, -24], [24, 0.2, -18]
+    ];
+
+    for (let i = 0; i < rockPositions.length; i++) {
+        const size = 0.7 + (i % 4) * 0.35; // slightly varied sizes for realism
         const geo = new THREE.SphereGeometry(size, 12, 12);
         addNoiseToGeometry(geo, 3.0, 0.4);
         geo.computeVertexNormals();
 
         const m = rockMatProto.clone();
-        m.color = new THREE.Color().setHSL(0.1, 0.15, 0.15 + Math.random() * 0.05);
+        m.color = new THREE.Color().setHSL(0.08, 0.15, 0.15 + (i % 5) * 0.04);
 
         const rock = new THREE.Mesh(geo, m);
-        rock.position.set(
-            (Math.random() - 0.5) * 36,
-            0.2 + Math.random() * 0.2,
-            -6 + (Math.random() - 0.5) * 36
-        );
+        rock.position.set(...rockPositions[i]);
         rock.castShadow = true;
         rock.receiveShadow = true;
         rock.name = 'rock';
@@ -167,7 +373,7 @@ export function startLevel2(onComplete) {
     // -------------------------
     const caveParts = [];
 
-    const caveGeo = new THREE.SphereGeometry(28, 96, 64);
+    const caveGeo = new THREE.SphereGeometry(28, 48, 32);
     caveGeo.scale(1.05, 0.75, 1.05);
     addNoiseToGeometry(caveGeo, 5.5, 2.4);
     caveGeo.computeVertexNormals();
@@ -191,26 +397,46 @@ export function startLevel2(onComplete) {
     caveParts.push(caveShell);
 
     function createTunnel(x, y, z, length = 20, radius = 4, yaw = 0) {
-        const tunnelGeo = new THREE.CylinderGeometry(radius, radius, length, 32, 6, true);
-        tunnelGeo.rotateZ(Math.PI / 2);
-        addNoiseToGeometry(tunnelGeo, 3.0, 0.9);
+    const tunnelGeo = new THREE.CylinderGeometry(radius, radius, length, 24, 6, true);
+    tunnelGeo.rotateZ(Math.PI / 2);
+    addNoiseToGeometry(tunnelGeo, 3.0, 0.9);
+    tunnelGeo.computeVertexNormals();
 
-        const tunnelMat = new THREE.MeshStandardMaterial({
-            map: wallTexture,
-            normalMap: wallNormal,
-            roughness: 1,
-            side: THREE.BackSide
-        });
-        const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
-        tunnel.position.set(x, y + 6, z);
-        tunnel.rotation.y = yaw;
-        tunnel.castShadow = false;
-        tunnel.receiveShadow = true;
-        tunnel.name = 'tunnel';
-        scene.add(tunnel);
-        caveParts.push(tunnel);
-        return tunnel;
+    // Create new instances of texture for tunnels (so we can tweak repeats independently)
+    const tunnelTex = wallTexture;
+    const tunnelNormal = wallNormal;
+
+
+    // Adjust texture tiling to match cylindrical UVs better
+    tunnelTex.wrapS = tunnelTex.wrapT = THREE.RepeatWrapping;
+    tunnelTex.repeat.set(8, 2); // wider repeat for long tunnels
+    if (tunnelNormal) {
+        tunnelNormal.wrapS = tunnelNormal.wrapT = THREE.RepeatWrapping;
+        tunnelNormal.repeat.set(8, 2);
     }
+
+    const tunnelMat = new THREE.MeshStandardMaterial({
+        map: tunnelTex,
+        normalMap: tunnelNormal,
+        roughness: 1,
+        metalness: 0.03,
+        side: THREE.BackSide,
+        color: new THREE.Color(0x9a8f82) // same tint as cave walls
+    });
+
+    const tunnel = new THREE.Mesh(tunnelGeo, tunnelMat);
+    tunnel.position.set(x, y + 6, z);
+    tunnel.rotation.y = yaw;
+    tunnel.castShadow = false;
+    tunnel.receiveShadow = true;
+    tunnel.name = 'tunnel';
+
+    scene.add(tunnel);
+    caveParts.push(tunnel);
+
+    return tunnel;
+}
+
 
     createTunnel(-12, -1, -6, 20, 4.5, Math.PI * 0.12);
     createTunnel(12, -1, -6, 20, 4.5, -Math.PI * 0.12);
@@ -220,7 +446,7 @@ export function startLevel2(onComplete) {
     // -------------------------
     // Torches
     // -------------------------
-        const torchGroups = [];
+    const torchGroups = [];
     function createTorch(x, y, z) {
         const g = new THREE.Group();
 
@@ -271,213 +497,195 @@ export function startLevel2(onComplete) {
     createTorch(-4, 0, -4);
     createTorch(0, 0, -8);
 
-     function animateFlames(dt) {
-    torchGroups.forEach(t => {
-        const data = t.userData;
-        const time = performance.now() * 0.004 + data.flickerTime;
+    function animateFlames(dt) {
+        torchGroups.forEach(t => {
+            const data = t.userData;
+            const time = performance.now() * 0.004 + data.flickerTime;
 
-        // === Flicker intensity ===
-       const flicker = 0.85 + Math.sin(time * 1.5) * 0.15;
-        // === Opacity and light flicker ===
-        data.flame.material.opacity = 0.9 + Math.sin(time * 2.0) * 0.1;
-data.light.intensity = 1.3 + Math.sin(time * 4) * 0.3;
-        data.light.color.setHSL(0.08 + Math.sin(time * 2.0) * 0.02, 1.0, 0.5);
+            // === Flicker intensity ===
+            const flicker = 0.85 + Math.sin(time * 1.5) * 0.15;
+            // === Opacity and light flicker ===
+            data.flame.material.opacity = 0.9 + Math.sin(time * 2.0) * 0.1;
+            data.light.intensity = 1.3 + Math.sin(time * 4) * 0.3;
+            data.light.color.setHSL(0.08 + Math.sin(time * 2.0) * 0.02, 1.0, 0.5);
 
-        // === Vertical flicker only (no side motion) ===
-        const baseHeight = 1.85; // bottom of flame — just above the bowl
-        const upFlicker = Math.abs(Math.sin(time * 2.5)) * 0.15; // small upward-only motion
-        data.flame.position.y = baseHeight + upFlicker;
+            // === Vertical flicker only (no side motion) ===
+            const baseHeight = 1.85; // bottom of flame — just above the bowl
+            const upFlicker = Math.abs(Math.sin(time * 2.5)) * 0.15; // small upward-only motion
+            data.flame.position.y = baseHeight + upFlicker;
 
-        // === Scale flicker: gentle upward stretching ===
-        const scaleY = 1.6 + Math.sin(time * 4.0) * 0.25; // vertical “breathing”
-        const scaleX = 0.9 + Math.sin(time * 4.0) * 0.1;  // small horizontal flicker
-        data.flame.scale.set(scaleX, scaleY, scaleX);
-    });
-}
-
-
-    // -------------------------
-    // Invisible pits (colliders)
-    // -------------------------
-    const pits = [];
-    const pitGeo = new THREE.BoxGeometry(2.2, 0.1, 2.2);
-    const pitMat = new THREE.MeshBasicMaterial({ color: 0x000000, visible: false });
-    const pitPositions = [
-        [5, 0, 5],
-        [-4, 0, -4]
-    ];
-    pitPositions.forEach(p => {
-        const pit = new THREE.Mesh(pitGeo, pitMat);
-        pit.position.set(...p);
-        pit.name = 'pit';
-        scene.add(pit);
-        pits.push(pit);
-    });
-
-    // -------------------------
-// Mud Pits (randomized)
-// -------------------------
-const mudPits = [];
-const mudPitGeo = new THREE.BoxGeometry(3, 0.1, 3); // width, height, depth
-const mudPitMat = new THREE.MeshStandardMaterial({ 
-    color: 0x523a28, // brown mud color
-    roughness: 1,
-    metalness: 0.05
-});
-
-// Randomized mud pit placement
-for (let i = 0; i < 5; i++) { // number of mud pits
-    const x = (Math.random() - 0.5) * 60; // adjust to floor bounds
-    const z = (Math.random() - 0.5) * 60;
-    const mud = new THREE.Mesh(mudPitGeo, mudPitMat);
-    mud.position.set(x, 0.05, z); // slightly above floor
-    mud.receiveShadow = true;
-    mud.name = 'mudPit';
-    scene.add(mud);
-    mudPits.push(mud);
-
-    // Also add invisible collider
-    const mudCollider = new THREE.Mesh(
-        new THREE.BoxGeometry(3, 1.0, 3),
-        new THREE.MeshBasicMaterial({ visible: false })
-    );
-    mudCollider.position.set(x, 0.5, z);
-    scene.add(mudCollider);
-    pits.push(mudCollider); // add to player's pits array
-}
-
-
-    // -------------------------
-    // Waterfall & pond
-    // -------------------------
-   
-
-    function createPond(x, y, z, radius = 3) {
-        const pondGeo = new THREE.CircleGeometry(radius, 32);
-        const pondMat = new THREE.MeshPhongMaterial({
-            color: 0x2e89b5,
-            transparent: true,
-            opacity: 0.8,
-            emissive: 0x114466,
-            emissiveIntensity: 0.3,
-            side: THREE.DoubleSide
+            // === Scale flicker: gentle upward stretching ===
+            const scaleY = 1.6 + Math.sin(time * 4.0) * 0.25; // vertical “breathing”
+            const scaleX = 0.9 + Math.sin(time * 4.0) * 0.1;  // small horizontal flicker
+            data.flame.scale.set(scaleX, scaleY, scaleX);
         });
-        const pond = new THREE.Mesh(pondGeo, pondMat);
-        pond.rotation.x = -Math.PI / 2;
-        pond.position.set(x, y, z);
-        scene.add(pond);
-        return pond;
     }
 
-    function createRocksAroundPond(x, y, z, radius = 3) {
-        const rockMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 1 });
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = radius + (Math.random() * 0.6 - 0.3);
-            const rx = x + Math.cos(angle) * dist;
-            const rz = z + Math.sin(angle) * dist;
-            const rockGeo = new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.3);
-            const rock = new THREE.Mesh(rockGeo, rockMat);
-            rock.position.set(rx, y, rz);
-            rock.castShadow = true;
-            rock.receiveShadow = true;
-            scene.add(rock);
-        }
+    // -------------------------
+    // Mud Pits (front and back, non-colliding)
+    // -------------------------
+    const mudPits = [];
+
+    // Load mud texture
+    const mudTexture = new THREE.TextureLoader().load('./textures/mud.jpg');
+    mudTexture.wrapS = THREE.RepeatWrapping;
+    mudTexture.wrapT = THREE.RepeatWrapping;
+
+    // Material with texture
+    const mudPitMat = new THREE.MeshStandardMaterial({
+        map: mudTexture,
+        color: 0x946b4a, // lighter warm brown tint
+        roughness: 0.85,
+        metalness: 0.15
+    });
+
+    // FRONT of tunnel (3 mud pits)
+    const frontMudZones = [
+        { x: -18, z: 5 },
+        { x: 0, z: 8 },
+        { x: 16, z: 6 }
+    ];
+
+    // BEHIND the tunnel (2 mud pits)
+    const backMudZones = [
+        { x: -8, z: -14 },
+        { x: 10, z: -16 }
+    ];
+
+    // Combine zones
+    const allMudZones = [...frontMudZones, ...backMudZones];
+
+    // Helper: irregular mud shape
+    function createMudShape() {
+        const shape = new THREE.Shape();
+        shape.moveTo(0, 0);
+        shape.splineThru([
+            new THREE.Vector2(2, 0.5),
+            new THREE.Vector2(3, 1.5),
+            new THREE.Vector2(2.2, 2.8),
+            new THREE.Vector2(0.5, 3.3),
+            new THREE.Vector2(-1.5, 3),
+            new THREE.Vector2(-2.8, 1.8),
+            new THREE.Vector2(-3, 0),
+            new THREE.Vector2(-2, -1.5),
+            new THREE.Vector2(-0.5, -2.2),
+            new THREE.Vector2(1.5, -1.8),
+            new THREE.Vector2(2, 0.5)
+        ]);
+        return shape;
     }
-   
-    const pond = createPond(0, 0.01, -19, 3);
-    createRocksAroundPond(0, 0.01, -19, 3);
+
+    // Helper: Fix stretched UVs on ShapeGeometry
+    function fixUVMapping(geom, textureRepeat = 2) {
+        geom.computeBoundingBox();
+
+        const max = geom.boundingBox.max;
+        const min = geom.boundingBox.min;
+        const offset = new THREE.Vector2(0 - min.x, 0 - min.y);
+        const range = new THREE.Vector2(max.x - min.x, max.y - min.y);
+
+        const uv = [];
+        const posAttr = geom.attributes.position;
+
+        for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            const y = posAttr.getY(i);
+            uv.push(((x + offset.x) / range.x) * textureRepeat);
+            uv.push(((y + offset.y) / range.y) * textureRepeat);
+        }
+
+        geom.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    }
+
+    // Create mud pits
+    allMudZones.forEach(zone => {
+        const shape = createMudShape();
+
+        const scale = 1 + Math.random() * 0.5;
+        const geom = new THREE.ShapeGeometry(shape);
+        geom.scale(scale, scale, 1);
+        geom.rotateZ(Math.random() * Math.PI);
+
+        // ✅ Fix UV stretching here
+        fixUVMapping(geom, 3); // try changing '3' to adjust tiling density
+
+        const mud = new THREE.Mesh(geom, mudPitMat);
+        mud.rotation.x = -Math.PI / 2;
+        mud.position.set(zone.x, 0.01, zone.z);
+        mud.receiveShadow = true;
+        mud.name = 'mudPit';
+        scene.add(mud);
+        mudPits.push(mud);
+
+        // Collider for this mud pit
+        const collider = new THREE.Mesh(
+            new THREE.CylinderGeometry(2.5 * scale, 2.5 * scale, 1, 12),
+            new THREE.MeshBasicMaterial({ visible: false })
+        );
+        collider.position.set(mud.position.x, 0.5, mud.position.z);
+        scene.add(collider);
+    });
 
     // -------------------------
     // Crystals (pickups)
     // -------------------------
-    const crystals = [];
-    const crystalMat = new THREE.MeshStandardMaterial({
-        color: 0x44e6ff,
-        emissive: 0x00aaff,
-        emissiveIntensity: 1.5,
-        roughness: 0.2,
-        metalness: 0.1
-    });
-    const crystalPositions = [
-        [2, 0.5, -3],
-        [-6, 0.5, 2],
-        [8, 0.5, -8]
-    ];
-    crystalPositions.forEach(p => {
-        const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), crystalMat.clone());
-        c.position.set(...p);
-        c.castShadow = true;
-        c.name = 'crystal';
-        scene.add(c);
-        crystals.push(c);
-
-        const light = new THREE.PointLight(0x33ccff, 0.9, 8);
-        light.position.copy(c.position).add(new THREE.Vector3(0, 1, 0));
-        scene.add(light);
-    });
+    const { crystals, crystalPositions } = createCrystals(scene);
 
     // -------------------------
     // Player (attach headlamp/light)
     // -------------------------
     let player;
-    // In the player initialization section, replace the obstacle setup:
-new Player(scene, new THREE.Vector3(0, 0.5, 6), pl => {
-    player = pl;
+    new Player(scene, new THREE.Vector3(0, 0.5, 6), pl => {
+        player = pl;
+        player.camera = camera; // attach camera for relative movement
+        // Separate obstacles: small objects vs boundaries
+        const smallObstacles = [...rocks];
+        const boundaries = [...caveParts]; // Cave walls and tunnels
 
-    // Separate obstacles: small objects vs boundaries
-    const smallObstacles = [...rocks];
-    const boundaries = [...caveParts]; // Cave walls and tunnels
+        // Add stalagmites, stalactites, rocks to obstacles
+        scene.traverse(obj => {
+            if (obj.name === 'stalag' || obj.name === 'stalact' || obj.name === 'rock') {
+                if (!smallObstacles.includes(obj)) smallObstacles.push(obj);
+            }
+        });
 
-    // Add stalagmites and stalactites to small obstacles
-    scene.traverse(obj => {
-        if (obj.name === 'stalag' || obj.name === 'stalact' || obj.name === 'rock') {
-            if (!smallObstacles.includes(obj)) smallObstacles.push(obj);
-        }
-    });
+       // Add falling rocks to obstacles so player cannot pass through them once they appear
+        newObstacles.forEach(ob => {
+            if (ob.type === 'rock') {
+                player.obstacles.push(ob.mesh);
+            }
+        });
 
-    player.setObstacles(smallObstacles);
-    player.setPits(pits);
-    player.setBoundaries(boundaries); // Add this line
 
-    
 
-        // Ensure player's model is at a reasonable scale & starting height (some GLTFs use different origins)
-        if (player.model) {
-            // Small safety: if model seems huge/small, scale it mildly
-            const bbox = new THREE.Box3().setFromObject(player.model);
-            const size = new THREE.Vector3();
-            bbox.getSize(size);
-            if (size.y > 4) player.model.scale.setScalar(0.5); // shrink giant models
-            if (size.y < 0.6) player.model.scale.setScalar(1.2); // enlarge tiny models
 
-            // Put player slightly above ground to avoid being "inside" the floor
-            player.model.position.y = Math.max(player.model.position.y, 0.4);
-        }
+        player.setObstacles(smallObstacles);
+        player.setPits(mudPits);
+        player.setBoundaries(boundaries); // Cave walls and tunnels
+        // water removed — no setWaterColliders call
 
-        // Headlamp attached to player's model (so it follows)
+        // ✅ Set terrain for height detection
+        player.setTerrain(floor);
+
+        // ✅ Set player initial spawn height based on terrain
+        const spawnX = 0, spawnZ = 6;
+        const spawnY = player.getTerrainHeightAt(spawnX, spawnZ) + 0.3; // offset above ground
+        if (player.model) player.model.position.set(spawnX, spawnY, spawnZ);
+
+        // Headlamp attached to player's model
         const headLamp = new THREE.PointLight(0xffffff, 1.2, 14, 2);
         headLamp.position.set(0, 0.6, 0.6);
-        if (player.model) {
-            player.model.add(headLamp);
-        } else if (player.mesh) {
-            player.mesh.add(headLamp);
-        }
+        if (player.model) player.model.add(headLamp);
+        else if (player.mesh) player.mesh.add(headLamp);
 
         // Debug helpers if requested
         if (DEBUG) {
-            // BoxHelper for player
             const ph = new THREE.BoxHelper(player.model, 0x00ff00);
             scene.add(ph);
-
-            // BoxHelpers for obstacles
-            simpleObstacles.forEach(o => {
+            smallObstacles.forEach(o => {
                 const bh = new THREE.BoxHelper(o, 0xff0000);
                 scene.add(bh);
             });
-
-            console.log('Player initial bbox:', new THREE.Box3().setFromObject(player.model));
-            console.log('Obstacles count:', smallObstacles.length);
         }
     });
 
@@ -485,8 +693,7 @@ new Player(scene, new THREE.Vector3(0, 0.5, 6), pl => {
     // HUD, input, clock
     // -------------------------
     initInput();
-    resetCounter();
-    showHUD();
+    
     const clock = new THREE.Clock();
     let animId;
 
@@ -494,80 +701,110 @@ new Player(scene, new THREE.Vector3(0, 0.5, 6), pl => {
         updateHUD(getCounter() + 1);
     }
 
-    // -------------------------
-    // Animation loop
-    // -------------------------
-    function animate() {
-        animId = requestAnimationFrame(animate);
-        const dt = clock.getDelta();
+  // -------------------------
+// Animation loop
+// -------------------------
+function animate() {
+    animId = requestAnimationFrame(animate);
+    const dt = clock.getDelta();
 
-        // update player — Player.update expects dt only (keys are global import)
-        if (player?.update) {
-            try {
-                player.update(dt);
-            } catch (e) {
-                console.warn('Player.update threw', e);
-            }
+    // --- Update player movement ---
+    if (player?.update) {
+        try {
+            player.update(dt);
+        } catch (e) {
+            console.warn('Player.update threw', e);
         }
+    }
 
-        // update torches (flicker)
+    // --- Torch flicker ---
     animateFlames(dt);
 
-        // rotate crystals / handle pickup
-        crystals.forEach((c, i) => {
-            if (!c) return;
-            c.rotation.y += 0.03;
-            if (player?.model && player.model.position.distanceTo(c.position) < 1.0) {
-                scene.remove(c);
-                crystals[i] = null;
-                incrementCounter();
-                if (getCounter() === crystalPositions.length) {
+    // --- Crystals / pickups ---
+   
+    updateCrystals(crystals, player, scene, (i) => {
+  updateHUD(getCounter() + 1);
+  if (getCounter() === crystalPositions.length) {
+    stopTimer(); // stop the countdown when all crystals collected
+    setTimeout(() => {
+      cleanup();
+      onComplete();
+    }, 600);
+  }
+});
+
+   if (player && player.model) {
+    newObstacles.forEach(ob => {
+        if (ob.type === 'rock') { // <-- now checks for 'rock'
+
+            // Trigger fall after interval
+            if (!ob.triggered) {
+                const distance = player.model.position.distanceTo(new THREE.Vector3(ob.mesh.position.x, 0, ob.mesh.position.z));
+                if (distance < 15) { // player nearby
+                    ob.triggered = true;
                     setTimeout(() => {
-                        cleanup();
-                        onComplete();
-                    }, 600);
+                        ob.falling = true;
+                        ob.mesh.visible = true;
+
+                        // Add log to player obstacles so they cannot pass through it
+                        player.obstacles.push(ob.mesh);
+
+                    }, ob.delay * 1000);
                 }
             }
-        });
 
-        
-        // simple camera follow third-person (smooth)
-        if (player?.model) {
-            const camTarget = player.model.position.clone().add(new THREE.Vector3(0, 3.0, 6.0));
-            camera.position.lerp(camTarget, 0.12);
-            camera.lookAt(player.model.position);
-            if (DEBUG) {
-                // quick positional debug log
-                console.log('Player pos:', player.model.position);
+            if (ob.falling) {
+                // Check collision first (prevent passing through player)
+                if (ob.collider.containsPoint(player.model.position)) {
+                    const pushBack = player.model.position.clone().sub(ob.mesh.position).normalize();
+                    player.model.position.add(pushBack.multiplyScalar(0.4));
+                    ob.mesh.position.y = Math.max(ob.mesh.position.y, player.model.position.y + 0.6);
+                } else {
+                    ob.mesh.position.y -= dt * 0.5; // slow fall
+                    if (ob.mesh.position.y <= ob.targetY) {
+                        ob.mesh.position.y = ob.targetY;
+                        ob.falling = false;
+                    }
+                }
+
+                // Update collider
+                ob.collider.min.y = ob.mesh.position.y - 0.5;
+                ob.collider.max.y = ob.mesh.position.y + 0.5;
             }
-         }
+        }
+    });
+}
 
-        renderer.render(scene, camera);
-    }
-    animate();
+
+
+
+    
+
+    // --- Camera follow ---
+    updateCameraFollow(camera, player?.model, DEBUG);
+
+    // --- Render the scene ---
+    renderer.render(scene, camera);
+}
+animate();
+
+
 
     // -------------------------
     // Cleanup & helpers
     // -------------------------
     function cleanup() {
-        cancelAnimationFrame(animId);
-        scene.traverse(obj => {
-            if (obj.geometry) {
-                try { obj.geometry.dispose?.(); } catch (e) {}
-            }
-            if (obj.material) {
-                try {
-                    if (Array.isArray(obj.material)) {
-                        obj.material.forEach(m => m.dispose?.());
-                    } else {
-                        obj.material.dispose?.();
-                    }
-                } catch (e) {}
-            }
-            try { if (obj.parent) obj.parent.remove(obj); } catch (e) {}
-        });
-        try { renderer.dispose(); } catch (e) {}
+  cancelAnimationFrame(animId);
+  scene.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose?.();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose?.());
+      else obj.material.dispose?.();
     }
+  });
+  // ⛔ Do not remove the renderer's DOM element or clear document.body
+}
+
 
     // WebGL events
     renderer.domElement.addEventListener('webglcontextlost', e => {
