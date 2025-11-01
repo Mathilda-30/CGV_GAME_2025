@@ -12,6 +12,8 @@
     "vite": "^7.1.9"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.2",
+    "simplex-noise": "^4.0.3",
     "three": "^0.180.0"
   }
 }
