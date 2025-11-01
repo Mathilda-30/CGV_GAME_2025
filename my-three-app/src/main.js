@@ -17,7 +17,7 @@ async function goToLevel3() {
   console.log("Starting Level 3...");
   await startLevel3(() => {
     alert("You Win! 🎉 Returning to Menu...");
-    showMenu(goToLevel1);  // pass the callback again for the menu
+    startLevel3(goToLevel3);  // pass the callback again for the menu
   });
 }
 

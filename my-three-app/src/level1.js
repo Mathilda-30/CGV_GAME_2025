@@ -53,8 +53,8 @@ export function startLevel1(onComplete) {
 
   
 
- const terrainGeometry = new THREE.PlaneGeometry(300, 300, 150, 150);
- terrainGeometry.rotateX(-Math.PI / 2);
+ //const terrainGeometry = new THREE.PlaneGeometry(300, 300, 150, 150);
+ //terrainGeometry.rotateX(-Math.PI / 2);
 
   //perlin like bumps for dunes
 
