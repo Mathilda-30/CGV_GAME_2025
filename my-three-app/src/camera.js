@@ -90,3 +90,4 @@ export function updateCameraFollow(camera, target, DEBUG = false) {
         if (DEBUG) console.log('Camera follow pos:', target.position);
     }
 }
+

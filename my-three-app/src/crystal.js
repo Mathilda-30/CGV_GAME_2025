@@ -13,29 +13,8 @@ export function createCrystals(scene) {
     const crystals = [];
     const crystalPositions = [];
 
-    const NUM_CRYSTALS = 10;
-    const MAX_ATTEMPTS = 200;
-    const caveRadius = 25;
-
-    // Collect rock meshes
-    const rocks = [];
-    scene.traverse(obj => {
-        if (obj.name === 'rock') rocks.push(obj);
-    });
-
-    // Helper: ensure we don't overlap rocks
-    function tooCloseToRocks(x, z) {
-        for (let r of rocks) {
-            const dist = Math.hypot(x - r.position.x, z - r.position.z);
-            if (dist < 2.5) return true;
-        }
-        return false;
-    }
-
     const raycaster = new THREE.Raycaster();
-    const down = new THREE.Vector3(0, -1, 0);
 
-    const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
     const crystalMat = new THREE.MeshStandardMaterial({
         color: 0x44e6ff,
         emissive: 0x00aaff,
