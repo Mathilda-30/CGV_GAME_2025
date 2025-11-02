@@ -15,6 +15,7 @@ export function startLevel1(onComplete) {
   // --- Realistic blue sky gradient + fog ---
   scene.background = new THREE.Color(0x87ceeb); // clear sky blue
   scene.fog = new THREE.Fog(0xe6c79c, 30, 120);
+  const raycaster = new THREE.Raycaster();
 
 const { camera, renderer, controls } = initCamera(scene);
 // -------------------------
@@ -231,7 +232,7 @@ for (let i = 0; i < 20; i++) {
   scene.add(terrain); 
 
   // === ROCKS ===
-  const rockGeo = new THREE.IcosahedronGeometry(0.6, 1);
+  /*const rockGeo = new THREE.IcosahedronGeometry(0.6, 1);
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
   const rocks = [];
 
@@ -249,7 +250,32 @@ for (let i = 0; i < 20; i++) {
     rock.receiveShadow = true;
     scene.add(rock);
     rocks.push(rock);
+  }*/
+
+  const rockGeo = new THREE.IcosahedronGeometry(0.6, 1);
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+  const rocks = [];
+
+  function placeRock() {
+    const x = (Math.random() - 0.5) * 250;
+    const z = (Math.random() - 0.5) * 250;
+    raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+    const hit = raycaster.intersectObject(terrain);
+    if (hit.length > 0) {
+      const y = hit[0].point.y;
+      const rock = new THREE.Mesh(rockGeo, rockMat.clone());
+      const scale = 0.5 + Math.random() * 1.5;
+      rock.scale.set(scale, scale * (0.6 + Math.random() * 0.4), scale);
+      rock.position.set(x, y + 0.3, z);
+      rock.rotation.y = Math.random() * Math.PI;
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      scene.add(rock);
+      rocks.push(rock);
+    }
   }
+  for (let i = 0; i < 25; i++) placeRock();
+
 
 
 
@@ -294,13 +320,75 @@ for (let i = 0; i < 10; i++) {
   createCactus((Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200);
 }
 
+// --- Obstacle Collision Handling (Rocks + Cacti) ---
+const obstacles = [...rocks, ...cacti];
+const playerRadius = 1.0; // Adjust based on your player size
+
+function handleObstacleCollisions() {
+  let collided = false;
+
+  obstacles.forEach(obs => {
+    if (!obs) return;
+
+    const dx = player.model.position.x - obs.position.x;
+    const dz = player.model.position.z - obs.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    const obsRadius = (obs.scale.x || 1) * 0.5;
+    const minDist = playerRadius + obsRadius;
+
+    if (dist < minDist) {
+      collided = true;
+
+      // Push the player just outside the obstacle
+      const overlap = minDist - dist;
+      const pushDirX = dx / dist;
+      const pushDirZ = dz / dist;
+
+      player.model.position.x += pushDirX * overlap;
+      player.model.position.z += pushDirZ * overlap;
+
+      // Completely stop all movement
+      if (player.velocity) {
+        player.velocity.x = 0;
+        player.velocity.z = 0;
+      }
+      if (player.direction) {
+        player.direction.x = 0;
+        player.direction.z = 0;
+      }
+    }
+  });
+
+  // If the player collided, zero their movement inputs
+  if (collided && player.input) {
+    player.input.forward = 0;
+    player.input.backward = 0;
+    player.input.left = 0;
+    player.input.right = 0;
+  }
+}
+
+
 
 
    const player = new Player(scene, new THREE.Vector3(0, 0, 0));
     player.camera = camera; // attach camera for relative movement
-  
 
   const { crystals, crystalPositions } = createCrystals(scene);
+
+  // --- Align crystals with terrain height (prevent burying) ---
+crystals.forEach(c => {
+  if (!c) return;
+  const origin = new THREE.Vector3(c.position.x, 100, c.position.z);
+  raycaster.set(origin, new THREE.Vector3(0, -1, 0));
+  const hit = raycaster.intersectObject(terrain);
+  if (hit.length > 0) {
+    // place slightly above sand surface
+    c.position.y = hit[0].point.y + 0.5;
+  }
+});
+
 
   // === Input + HUD ===
   initInput();
@@ -316,6 +404,26 @@ for (let i = 0; i < 10; i++) {
     const time = clock.getElapsedTime();
 
     player.update(dt);
+
+    const playerPos = player.model.position;
+    
+    // --- Ground Alignment ---
+    raycaster.set(
+      new THREE.Vector3(playerPos.x, playerPos.y + 5, playerPos.z),
+      new THREE.Vector3(0, -1, 0)
+    );
+    const intersects = raycaster.intersectObject(terrain);
+    if (intersects.length > 0) {
+      const groundY = intersects[0].point.y;
+      const targetY = groundY + 0.02;
+      player.model.position.y = THREE.MathUtils.lerp(player.model.position.y, targetY, 0.4);
+      if (player.velocity && player.velocity.y < 0) player.velocity.y = 0;
+    } else {
+      player.model.position.y = 0.5; // fallback if off-terrain
+    }
+
+    handleObstacleCollisions();
+
 
     // --- Camera Follow ---
     camera.position.lerp(

@@ -11,6 +11,8 @@ export function createCrystals(scene, count = 10, bounds = { xMin: -20, xMax: 20
     const crystals = [];
     const crystalPositions = [];
 
+    const raycaster = new THREE.Raycaster();
+
     const crystalMat = new THREE.MeshStandardMaterial({
         color: 0x44e6ff,
         emissive: 0x00aaff,
