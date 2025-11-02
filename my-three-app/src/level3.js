@@ -13,10 +13,10 @@ import { createIsland, animateIslandElements } from './island.js';
 import { initCrystals, updateCrystals } from './crystal2.js';
 // --- ADDED UI imports ---
 import { showHUD, resetCounter, startTimer, stopTimer, isTimerPaused } from './ui.js'; 
-import { showMenu } from './menu.js'; // Assuming menu.js exists
+import { showMenu } from './menu.js'; 
 import { createHazards, updateHazards, checkHazardCollisions } from './hazards.js';
 
-// ============ LEVEL STATE ============
+
 let world;
 let water = null;
 let scene = null;
@@ -69,18 +69,18 @@ export async function startLevel3(onComplete) {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   document.body.innerHTML = "";
   document.body.appendChild(renderer.domElement);
 
   // --- HUD & TIMER ---
   showHUD();
-  resetCounter(); // <-- ADDED
+  resetCounter(); 
 
   // --- ADDED TIMER BLOCK ---
   startTimer(180, () => { // 180 seconds = 3 minutes
     console.log("⏰ Time’s up!");
-    cleanup(); // This will call your existing cleanup function
+    cleanup(); 
     stopTimer();
 
     // Create the Time's Up popup
@@ -145,7 +145,7 @@ export async function startLevel3(onComplete) {
 
 
   // --- DEBUG & CONTROLS ---
-  // debugRenderer = new CustomRapierDebugRenderer(scene, world); // Removed
+  // debugRenderer = new CustomRapierDebugRenderer(scene, world); 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
@@ -183,8 +183,7 @@ export async function startLevel3(onComplete) {
   createJumpPads(scene, world, RAPIER);
   createHazards(scene, world, RAPIER);
   createWallsAndObstacles(scene, world, RAPIER);
-
-  // --- TEST CUBE (REMOVED) ---
+-
 
   // --- LOAD PLAYER ---
   console.log('🎮 Loading player...');
@@ -196,9 +195,9 @@ export async function startLevel3(onComplete) {
   console.log('💎 Initializing crystals...');
   initCrystals(scene, crystalPositions, () => {
     console.log('🎉 ALL CRYSTALS COLLECTED!');
-    stopTimer(); // <-- ADDED
-    // (Add level complete logic here)
-  }, listener); // <-- ADDED listener
+    stopTimer(); 
+    // level complete actions
+  }, listener);
 
   // --- LOAD AMBIENT SOUND ---
   const audioLoader = new THREE.AudioLoader();
@@ -206,7 +205,7 @@ export async function startLevel3(onComplete) {
 
   let audioLoaded = false;
   audioLoader.load(
-    '/level3/sound/sea-and-seagull-wave-5932.mp3',
+    './level3/sound/sea-and-seagull-wave-5932.mp3',
     function(buffer) {
       ambientSound.setBuffer(buffer);
       ambientSound.setLoop(true);
@@ -237,7 +236,7 @@ export async function startLevel3(onComplete) {
   function animate() {
     animId = requestAnimationFrame(animate);
     
-    // --- ADDED: PAUSE CHECK ---
+    // --- PAUSE CHECK ---
     if (isTimerPaused()) return;
 
     const dt = clock.getDelta();
@@ -251,7 +250,7 @@ export async function startLevel3(onComplete) {
     updateHazards(dt);
     updateJumpPadEffects(dt);
     updateJumpPadCooldowns(dt);
-    updatePlayer(dt);
+    updatePlayer(dt, camera);
     world.step();
 
     if (player.body && player.model) {
@@ -266,7 +265,7 @@ export async function startLevel3(onComplete) {
     checkHazardCollisions();
     checkJumpPadCollisions();
 
-    // if (debugRenderer) debugRenderer.update(); // Removed
+    // if (debugRenderer) debugRenderer.update();
     renderer.render(scene, camera);
     resetJustPressed();
   }
@@ -276,10 +275,10 @@ export async function startLevel3(onComplete) {
   function cleanup() {
     console.log('🛑 Cleaning up level...');
     cancelAnimationFrame(animId);
-    stopTimer(); // <-- ADDED
+    stopTimer(); 
     renderer.dispose();
     world.free();
-    // if (debugRenderer) debugRenderer.dispose(); // Removed
+    // if (debugRenderer) debugRenderer.dispose(); 
     if (ambientSound.isPlaying) ambientSound.stop();
     renderer.domElement.removeEventListener('click', startAudio);
   }

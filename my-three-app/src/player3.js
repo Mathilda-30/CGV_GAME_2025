@@ -1,5 +1,3 @@
-// player3.js
-
 import * as THREE from 'three';
 import { keys } from './input2.js';
 
@@ -9,7 +7,7 @@ const PLAYER_RADIUS = 0.5;
 // Physics Constants
 const GRAVITY = -9.81;
 const JUMP_POWER = 10.0;
-const PLAYER_SPEED = 5.0;
+const PLAYER_SPEED = 5.0; // Base walking speed
 const ROTATION_SPEED = 0.15;
 
 export const player = {
@@ -25,22 +23,27 @@ export const player = {
   fallDistance: 0,
   maxFallDistance: 0,
   lastGroundedPosition: new THREE.Vector3(),
-  // debugLastAction: 'Idle', // Removed
   RAPIER: null,
-  world: null
+  world: null,
+  speedMultiplier: 1.0 // <- Allows mud/slower zones
 };
+
+// Allows other scripts (like mud zones) to change player speed
+export function setPlayerSpeedMultiplier(multiplier) {
+  player.speedMultiplier = multiplier;
+}
 
 export function initPlayer3(scene, loader, world, RAPIER, startPos = { x: 5, y: 20, z: 8 }) {
   player.RAPIER = RAPIER;
   player.world = world;
-  
-  const modelPath = '/models/azri_walk_and_idle_animation.glb';
+  player.speedMultiplier = 1.0;
 
+  const modelPath = './models/azri_walk_and_idle_animation.glb';
   loader.load(
     modelPath,
-    function (gltf) {
+    (gltf) => {
       player.model = gltf.scene;
-      player.model.traverse(function(child) {
+      player.model.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
@@ -48,110 +51,95 @@ export function initPlayer3(scene, loader, world, RAPIER, startPos = { x: 5, y: 
       });
       scene.add(player.model);
 
-      // --- Animation Setup ---
+      // --- Animation setup ---
       player.mixer = new THREE.AnimationMixer(player.model);
-      if (gltf.animations && gltf.animations.length) {
-        gltf.animations.forEach((clip) => {
-          player.actions[clip.name] = player.mixer.clipAction(clip);
-        });
-        
-        if (player.actions['Idle']) {
-          player.actions['Idle'].play();
-          player.currentAction = 'Idle';
-        }
+      gltf.animations.forEach((clip) => {
+        player.actions[clip.name] = player.mixer.clipAction(clip);
+      });
+      if (player.actions['Idle']) {
+        player.actions['Idle'].play();
+        player.currentAction = 'Idle';
       }
 
-      // --- PHYSICS BODY SETUP ---
-      const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+      // --- Physics (KINEMATIC BODY for walking) ---
+      const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
         .setTranslation(startPos.x, startPos.y, startPos.z)
         .lockRotations();
-      
       player.body = world.createRigidBody(bodyDesc);
-      player.body.setGravityScale(1.0, true);
 
-      // --- Capsule collider ---
-      const colliderDesc = RAPIER.ColliderDesc.cylinder(PLAYER_HALF_HEIGHT, PLAYER_RADIUS);
-      colliderDesc.setRestitution(0.0);
-      colliderDesc.setFriction(1.0);
-      
+      // --- Collider ---
+      const colliderDesc = RAPIER.ColliderDesc.cylinder(PLAYER_HALF_HEIGHT, PLAYER_RADIUS)
+        .setRestitution(0.0)
+        .setFriction(1.0);
       world.createCollider(colliderDesc, player.body);
 
-      player.model.position.set(startPos.x, startPos.y - PLAYER_HALF_HEIGHT, startPos.z);
-      player.lastGroundedPosition.copy(player.model.position);
-
-      // --- CHARACTER CONTROLLER SETUP ---
+      // --- Controller ---
       player.controller = world.createCharacterController(0.01);
       player.controller.enableSnapToGround(0.5);
       player.controller.setMaxSlopeClimbAngle(Math.PI / 3);
       player.controller.setMinSlopeSlideAngle(Math.PI / 4);
       player.controller.enableAutostep(0.8, 0.5, true);
+
+      player.model.position.set(startPos.x, startPos.y - PLAYER_HALF_HEIGHT, startPos.z);
+      player.lastGroundedPosition.copy(player.model.position);
     },
-    (xhr) => { 
-      // Loading progress...
-    },
-    (error) => { 
-      console.error('❌ Error loading player model:', error); 
-    }
+    undefined,
+    (err) => console.error('❌ Error loading player model:', err)
   );
 }
 
-function switchAnimation(newActionName) {
-  if (!player.actions[newActionName]) return;
-  if (player.currentAction === newActionName) return;
-  
-  const newAction = player.actions[newActionName];
+function switchAnimation(newAction) {
+  if (player.currentAction === newAction || !player.actions[newAction]) return;
   const oldAction = player.actions[player.currentAction];
-  
-  if (oldAction) {
-    oldAction.fadeOut(0.3);
-  }
-  
-  newAction.reset().fadeIn(0.3).play();
-  player.currentAction = newActionName;
+  if (oldAction) oldAction.fadeOut(0.3);
+  player.actions[newAction].reset().fadeIn(0.3).play();
+  player.currentAction = newAction;
 }
 
 const moveVector = new THREE.Vector3();
+const upVector = new THREE.Vector3(0, 1, 0);
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
 const targetQuaternion = new THREE.Quaternion();
 const currentQuaternion = new THREE.Quaternion();
-const upVector = new THREE.Vector3(0, 1, 0);
 
-export function updatePlayer(deltaTime) {
-  if (!player.model || !player.mixer || !player.body || !player.controller) return;
+export function updatePlayer(deltaTime, camera) {
+  if (!player.model || !player.mixer || !player.body || !player.controller || !camera) return;
 
-  // --- 1. Check grounded state BEFORE anything else ---
+  // --- Ground detection ---
   const wasGrounded = player.isGrounded;
   player.isGrounded = player.controller.computedGrounded();
-  
-  if (player.isGrounded && !wasGrounded) {
-    player.velocityY = 0;
-    player.maxFallDistance = 0;
-  }
+  if (player.isGrounded && !wasGrounded) player.velocityY = 0;
 
-  // --- 2. Calculate desired horizontal movement ---
+  // --- Input movement ---
   moveVector.set(0, 0, 0);
-  let isMovingHorizontally = false;
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  forward.normalize();
+  right.crossVectors(upVector, forward).normalize();
 
-  if (keys.w.pressed) { moveVector.z -= 1; isMovingHorizontally = true; }
-  if (keys.s.pressed) { moveVector.z += 1; isMovingHorizontally = true; }
-  if (keys.a.pressed) { moveVector.x -= 1; isMovingHorizontally = true; }
-  if (keys.d.pressed) { moveVector.x += 1; isMovingHorizontally = true; }
+  let isMoving = false;
+  if (keys.w.pressed) { moveVector.add(forward); isMoving = true; }
+  if (keys.s.pressed) { moveVector.sub(forward); isMoving = true; }
+  if (keys.a.pressed) { moveVector.add(right); isMoving = true; }
+  if (keys.d.pressed) { moveVector.sub(right); isMoving = true; }
 
-  // --- 3. Apply rotation to model ---
-  if (isMovingHorizontally) {
-    const targetAngle = Math.atan2(moveVector.x, moveVector.z);
-    targetQuaternion.setFromAxisAngle(upVector, targetAngle);
+  // --- Rotation ---
+  if (isMoving) {
+    const angle = Math.atan2(moveVector.x, moveVector.z);
+    targetQuaternion.setFromAxisAngle(upVector, angle);
     currentQuaternion.copy(player.model.quaternion);
     currentQuaternion.slerp(targetQuaternion, ROTATION_SPEED);
     player.model.quaternion.copy(currentQuaternion);
   }
 
-  // --- 4. Normalize and scale movement ---
-  if (isMovingHorizontally) {
+  // --- Normalize and apply speed multiplier ---
+  if (isMoving) {
     moveVector.normalize();
-    moveVector.multiplyScalar(PLAYER_SPEED);
+    moveVector.multiplyScalar(PLAYER_SPEED * player.speedMultiplier * deltaTime);
   }
 
-  // --- 5. Handle jumping ---
+  // --- Jumping ---
   if (keys.space.justPressed && player.isGrounded && player.jumpCooldown <= 0) {
     player.velocityY = JUMP_POWER;
     player.isGrounded = false;
@@ -159,66 +147,40 @@ export function updatePlayer(deltaTime) {
   }
   player.jumpCooldown -= deltaTime;
 
-  // --- 6. Apply gravity ---
+  // --- Gravity ---
   if (!player.isGrounded) {
     player.velocityY += GRAVITY * deltaTime;
-    player.velocityY = Math.max(player.velocityY, -50); // Clamp fall speed
+    player.velocityY = Math.max(player.velocityY, -50);
   }
 
-  // --- 7. Build movement vector for controller ---
-  const movement = new player.RAPIER.Vector3(
-    moveVector.x * deltaTime,
+  // --- Apply movement via CharacterController ---
+  const move = new player.RAPIER.Vector3(
+    moveVector.x,
     player.velocityY * deltaTime,
-    moveVector.z * deltaTime
+    moveVector.z
   );
+  player.controller.computeColliderMovement(player.body, move);
 
-  // --- 8. Apply movement using character controller ---
-  player.controller.computeColliderMovement(player.body, movement);
+  const result = player.controller.computedMovement();
+  const newPos = player.body.translation();
+  player.body.setNextKinematicTranslation({
+    x: newPos.x + result.x,
+    y: newPos.y + result.y,
+    z: newPos.z + result.z
+  });
 
-  // --- 9. Check grounded AFTER computing movement ---
+  // --- Update grounded state after move ---
   player.isGrounded = player.controller.computedGrounded();
-  
-  if (player.isGrounded) {
-    player.velocityY = 0;
-  }
+  if (player.isGrounded) player.velocityY = 0;
 
-  // --- 10. Get the computed movement and apply it ---
-  const computedMovement = player.controller.computedMovement();
-  let newPos = player.body.translation();
-  
-  newPos = new player.RAPIER.Vector3(
-    newPos.x + computedMovement.x,
-    newPos.y + computedMovement.y,
-    newPos.z + computedMovement.z
-  );
-  
-  player.body.setTranslation(newPos, true);
-
-  // --- 11. Track fall distance ---
-  if (!player.isGrounded) {
-    player.fallDistance += Math.abs(player.velocityY) * deltaTime;
-    player.maxFallDistance = Math.max(player.maxFallDistance, player.fallDistance);
-  }
-
-  // --- 12. Animation state machine ---
-  updateAnimationState(isMovingHorizontally);
-
-  // --- 13. Update animation mixer ---
+  // --- Animation ---
+  updateAnimationState(isMoving);
   player.mixer.update(deltaTime);
 }
 
-function updateAnimationState(isMovingHorizontally) {
-  let newAction = 'Idle';
-
-  if (player.isGrounded && isMovingHorizontally) {
-    newAction = 'Walking';
-  } else {
-    newAction = 'Idle';
-  }
-  
-  if (player.actions[newAction]) {
-    switchAnimation(newAction);
-  }
+function updateAnimationState(isMoving) {
+  const target = (player.isGrounded && isMoving) ? 'Walking' : 'Idle';
+  if (player.actions[target]) switchAnimation(target);
 }
 
 export function getPlayerPosition() {
@@ -230,8 +192,4 @@ export function getPlayerPosition() {
 export function applyKnockback(direction, force) {
   if (!player.body || !player.RAPIER) return;
   player.velocityY = force * 0.5;
-  player.body.applyImpulse(
-    new player.RAPIER.Vector3(direction.x * force, 0, direction.z * force),
-    true
-  );
 }

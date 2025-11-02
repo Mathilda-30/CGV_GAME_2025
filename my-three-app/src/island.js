@@ -10,10 +10,10 @@ const noise2D = createNoise2D(() => ISLAND_SEED);
 
 const textureLoader = new THREE.TextureLoader();
 // Textures
-const colorMap = textureLoader.load('/level3/ground/Ground054_2K-JPG_Color.jpg');
-const aoMap = textureLoader.load('/level3/ground/Ground054_2K-JPG_AmbientOcclusion.jpg');
-const roughnessMap = textureLoader.load('/level3/ground/Ground054_2K-JPG_Roughness.jpg');
-const normalMap = textureLoader.load('/level3/ground/Ground054_2K-JPG_NormalDX.jpg');
+const colorMap = textureLoader.load('./level3/ground/Ground054_2K-JPG_Color.jpg');
+const aoMap = textureLoader.load('./level3/ground/Ground054_2K-JPG_AmbientOcclusion.jpg');
+const roughnessMap = textureLoader.load('./level3/ground/Ground054_2K-JPG_Roughness.jpg');
+const normalMap = textureLoader.load('./level3/ground/Ground054_2K-JPG_NormalDX.jpg');
 const textureRepeat = 20;
 for (let map of [colorMap, aoMap, roughnessMap, normalMap]) {
   map.wrapS = THREE.RepeatWrapping; map.wrapT = THREE.RepeatWrapping;
@@ -46,7 +46,7 @@ function loadPalmTreeModel() {
   palmTreeLoading = true;
   return new Promise((resolve, reject) => {
     gltfLoader.load(
-      '/level3/palm/quiver_tree_02_4k.gltf',
+      './level3/palm/quiver_tree_02_4k.gltf',
       (gltf) => {
         console.log('Palm tree GLTF model loaded successfully!');
         const model = gltf.scene;
@@ -364,7 +364,7 @@ export function createIsland(scene, world, RAPIER) {
 
   // --- DYNAMIC WATER (REFINED) ---
   const waterNormals = textureLoader.load(
-    '/level3/water/Water_002_NORM.jpg', // Using your file
+    './level3/water/Water_002_NORM.jpg', 
     function ( texture ) {
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   });
@@ -391,6 +391,6 @@ export function createIsland(scene, world, RAPIER) {
   scene.add(water);
   console.log('Dynamic Water object added.');
 
-  // --- 3. RETURN THE WATER OBJECT ---
+  
   return water;
 }
