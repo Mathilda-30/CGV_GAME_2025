@@ -68,18 +68,26 @@ export function initCamera(scene) {
  */
 export function updateCameraFollow(camera, target, DEBUG = false) {
     if (target) {
-        // Orbit around target using cameraRotation.x (yaw) and cameraRotation.y (pitch)
-        const distance = 8.0;
+        const distance = 8.0; // fixed distance behind player
+        const height = 3.0;   // fixed height above player
+
+        // Convert yaw (x) and pitch (y) into a spherical offset
+        const horizontalDist = distance * Math.cos(cameraRotation.y);
         const offset = new THREE.Vector3(
-            Math.sin(cameraRotation.x) * distance,
-            3.0 + cameraRotation.y * 5.0, // vertical offset with pitch
-            Math.cos(cameraRotation.x) * distance
+            Math.sin(cameraRotation.x) * horizontalDist,
+            height + distance * Math.sin(cameraRotation.y),
+            Math.cos(cameraRotation.x) * horizontalDist
         );
 
         const desiredPosition = target.position.clone().add(offset);
+
+        // Smoothly move camera to the desired position
         camera.position.lerp(desiredPosition, 0.12);
+
+        // Make camera look at the player
         camera.lookAt(target.position);
 
         if (DEBUG) console.log('Camera follow pos:', target.position);
     }
 }
+
