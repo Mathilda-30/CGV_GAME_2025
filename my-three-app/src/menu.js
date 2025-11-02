@@ -222,7 +222,7 @@ audioLoader.load('./sound/menu-song.mp3', buffer => {
 
   howBtn.addEventListener('click', () => {
     showPopup('How to Play', `
-      🕹️ Use W, A, S, D to move.<br>
+      🕹️ Use W, A, S, D to move and space to Jump.<br>
       🖱️ Use the arrow keys to look around (Change the camera view).<br>
       💎 Collect all 10 crystals before time runs out so that you can move on to a new level!<br>
       🚫 If the timer hits zero, you lose.

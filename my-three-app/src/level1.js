@@ -41,7 +41,7 @@ audioLoader.load('./sound/Desert_sound.mp3', buffer => {
 resetCounter();
 showHUD();
 
-startTimer(180, () => {
+startTimer(60, () => {
   console.log("⏰ Time’s up!");
   cleanup();
   stopTimer();

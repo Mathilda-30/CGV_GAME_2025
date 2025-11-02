@@ -48,7 +48,7 @@ audioLoader.load('./sound/level2-sound.mp3', buffer => {
 resetCounter();
     showHUD();
 
-startTimer(180, () => {
+startTimer(90, () => {
   console.log("⏰ Time’s up!");
   cleanup();
   stopTimer();
