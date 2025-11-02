@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter,startTimer, stopTimer, isTimerPaused } from './ui.js';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import { Player } from './player2.js'; 
 import { initCamera, updateCameraFollow } from './camera.js';
@@ -19,7 +19,7 @@ export function startLevel1(onComplete) {
 
 const { camera, renderer, controls } = initCamera(scene);
 // -------------------------
-// 🔊 Global Background Sound (Level 2)
+// 🔊 Global Background Sound (Level 1)
 // -------------------------
 const listener = new THREE.AudioListener();
 const sound = new THREE.Audio(listener);
@@ -42,11 +42,11 @@ resetCounter();
 showHUD();
 
 startTimer(180, () => {
-  console.log("Time’s up!");
+  console.log("⏰ Time’s up!");
   cleanup();
   stopTimer();
 
-  // === Popup Overlay ===
+  // Create the Time's Up popup
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed',
@@ -103,7 +103,6 @@ startTimer(180, () => {
     color: 'white',
   });
 
-  // === Button Actions ===
   restartBtn.addEventListener('click', () => {
     overlay.remove();
     startLevel1(onComplete);
@@ -112,7 +111,7 @@ startTimer(180, () => {
   menuBtn.addEventListener('click', () => {
     overlay.remove();
     cleanup();
-    showMenu(() => startLevel1(onComplete)); // Return to menu
+    showMenu(() => startLevel1(onComplete));
   });
 
   box.appendChild(msg);
@@ -121,6 +120,7 @@ startTimer(180, () => {
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 });
+
 
 
 
@@ -399,9 +399,12 @@ crystals.forEach(c => {
 
   // === Game Loop ===
   function animate() {
-    animId = requestAnimationFrame(animate);
-    const dt = clock.getDelta();
-    const time = clock.getElapsedTime();
+  animId = requestAnimationFrame(animate);
+
+  // 🔹 If game is paused (timer paused), freeze everything
+  if (isTimerPaused()) return;
+
+  const dt = clock.getDelta();
 
     player.update(dt);
 
@@ -425,29 +428,29 @@ crystals.forEach(c => {
     handleObstacleCollisions();
 
 
-    // --- Camera Follow ---
-    camera.position.lerp(
-        player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
-        0.1
-    );
-    camera.lookAt(player.model.position);
+  // Smooth follow camera
+  camera.position.lerp(
+    player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
+    0.1
+  );
+  camera.lookAt(player.model.position);
 
-    // Replace crystal update code with:
-    updateCrystals(crystals, player, scene, (i) => {
-  updateHUD(getCounter() + 1);
-  if (getCounter() === crystalPositions.length) {
-    stopTimer(); // stop the countdown when all crystals collected
-    setTimeout(() => {
-      cleanup();
-      onComplete();
-    }, 600);
-  }
-});
+  // Crystal logic
+  updateCrystals(crystals, player, scene, () => {
+    updateHUD(getCounter() + 1);
+    if (getCounter() === crystalPositions.length) {
+      stopTimer();
+      setTimeout(() => {
+        cleanup();
+        onComplete();
+      }, 600);
+    }
+  });
 
-
-    updateCameraFollow(camera, player?.model, DEBUG);
-    renderer.render(scene, camera);
+  updateCameraFollow(camera, player?.model, DEBUG);
+  renderer.render(scene, camera);
 }
+
   animate();
 
   function cleanup() {

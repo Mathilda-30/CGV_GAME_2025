@@ -7,7 +7,7 @@ export class Player {
     constructor(scene, position = new THREE.Vector3(0, 0, 0), onLoadCallback) {
         this.scene = scene;
         this.speed = 5;
-        this.jumpPower = 5;
+        this.jumpPower = 8;
         this.gravity = -9.8;
         this.velocity = new THREE.Vector3();
         this.onGround = true;
@@ -93,7 +93,7 @@ export class Player {
             if (distance < radius) { inMud = true; break; }
         }
     }
-    const targetSpeed = inMud ? this.speed * 0.2 : this.speed;
+    const targetSpeed = inMud ? this.speed * 0.3 : this.speed;
     this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, targetSpeed, 0.1);
 
     // --- Apply movement ---

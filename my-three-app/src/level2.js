@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ImprovedNoise } from 'three/examples/jsm/math/ImprovedNoise.js';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter,startTimer, stopTimer, isTimerPaused } from './ui.js';
 import { Player } from './player2.js';
 import { initCamera, updateCameraFollow } from './camera.js';
 import { createCrystals, updateCrystals } from './crystal.js';
@@ -26,7 +26,7 @@ export function startLevel2(onComplete) {
 
     const { camera, renderer, controls } = initCamera(scene);
     // -------------------------
-// 🔊 Global Background Sound (Level 2)
+//  Global Background Sound (Level 2)
 // -------------------------
 const listener = new THREE.AudioListener();
 const sound = new THREE.Audio(listener);
@@ -47,14 +47,13 @@ audioLoader.load('./sound/level2-sound.mp3', buffer => {
 
 resetCounter();
     showHUD();
-    
-   startTimer(180, () => {
-  console.log("Time’s up!");
-  stopTimer();
-  cancelAnimationFrame(animId); // stop rendering
-  renderer.domElement.style.filter = 'blur(6px)'; // optional blur
 
-  // === Popup Overlay ===
+startTimer(180, () => {
+  console.log("⏰ Time’s up!");
+  cleanup();
+  stopTimer();
+
+  // Create the Time's Up popup
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed',
@@ -69,7 +68,7 @@ resetCounter();
     justifyContent: 'center',
     color: 'white',
     fontFamily: 'sans-serif',
-    zIndex: 99999, // very high to ensure it's visible
+    zIndex: 10000,
   });
 
   const box = document.createElement('div');
@@ -113,16 +112,13 @@ resetCounter();
 
   restartBtn.addEventListener('click', () => {
     overlay.remove();
-    cleanup();
-    renderer.domElement.style.filter = ''; // remove blur
-    startLevel2(onComplete);
+    startLevel1(onComplete);
   });
 
   menuBtn.addEventListener('click', () => {
     overlay.remove();
     cleanup();
-    renderer.domElement.style.filter = '';
-    showMenu(() => startLevel2(onComplete));
+    showMenu(() => startLevel1(onComplete));
   });
 
   box.appendChild(msg);
@@ -131,8 +127,6 @@ resetCounter();
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 });
-
-
     // -------------------------
     // Lights (ambient + sun + global)
     // -------------------------
@@ -226,7 +220,7 @@ resetCounter();
 // Falling Rocks (same style as stationary rocks)
 // -------------------------
 
-const newObstacles = []; // <-- declare BEFORE using it
+const newObstacles = []; // 
 
 const fallingRocks = [];
 const rockTex = textureLoader.load('./textures/cave.jpg');
@@ -464,7 +458,7 @@ function triggerFall() {
         bowl.position.y = 1.1;
         g.add(bowl);
 
-        // 🔥 Flame Sprite
+        //  Flame Sprite
         const flameTexture = new THREE.TextureLoader().load('./textures/torch_flame.png');
         flameTexture.minFilter = THREE.LinearFilter;
         flameTexture.magFilter = THREE.LinearFilter;
@@ -606,7 +600,7 @@ function triggerFall() {
         geom.scale(scale, scale, 1);
         geom.rotateZ(Math.random() * Math.PI);
 
-        // ✅ Fix UV stretching here
+        //  Fix UV stretching here
         fixUVMapping(geom, 3); // try changing '3' to adjust tiling density
 
         const mud = new THREE.Mesh(geom, mudPitMat);
@@ -664,10 +658,10 @@ function triggerFall() {
         player.setBoundaries(boundaries); // Cave walls and tunnels
         // water removed — no setWaterColliders call
 
-        // ✅ Set terrain for height detection
+        //  Set terrain for height detection
         player.setTerrain(floor);
 
-        // ✅ Set player initial spawn height based on terrain
+        //  Set player initial spawn height based on terrain
         const spawnX = 0, spawnZ = 6;
         const spawnY = player.getTerrainHeightAt(spawnX, spawnZ) + 0.3; // offset above ground
         if (player.model) player.model.position.set(spawnX, spawnY, spawnZ);
@@ -706,7 +700,10 @@ function triggerFall() {
 // -------------------------
 function animate() {
     animId = requestAnimationFrame(animate);
-    const dt = clock.getDelta();
+    // 🔹 If game is paused (timer paused), freeze everything
+      if (isTimerPaused()) return;
+    
+      const dt = clock.getDelta();
 
     // --- Update player movement ---
     if (player?.update) {
@@ -802,7 +799,7 @@ animate();
       else obj.material.dispose?.();
     }
   });
-  // ⛔ Do not remove the renderer's DOM element or clear document.body
+  
 }
 
 
