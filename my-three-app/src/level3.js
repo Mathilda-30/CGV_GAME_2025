@@ -1,23 +1,47 @@
 // level3.js
 
 import * as THREE from 'three';
-import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter } from './ui.js';
-import { initCamera, updateCameraFollow } from './camera.js';
-import { initPlayer, updatePlayer, player } from './player.js';
-//import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { collisionManager } from './level3Collisions.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { initInput, keys, resetJustPressed } from './input.js';
+import { player, initPlayer3, updatePlayer } from './player3.js';
+// import { updateCamera } from './camera.js'; // Removed unused import
+import RAPIER from '@dimforge/rapier3d-compat';
+import { CustomRapierDebugRenderer } from './debug.js';
+import { createIsland, animateIslandElements } from './island.js';
 
+let world;
+let cubeRigidBody;
+let debugRenderer = null;
+let controls = null;
+let cube = null;
+let water = null; 
 
-export function startLevel3(onComplete) {
- 
-// Scene setup
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0a08);
-scene.fog = new THREE.FogExp2(0x0b0a08, 0.028);
+const PLAYER_HALF_HEIGHT = 0.9;
 
-const { camera, renderer, controls } = initCamera(scene);
+export async function startLevel3(onComplete) {
 
+  await RAPIER.init();
+  let gravity = { x: 0.0, y: -9.81, z: 0.0 };
+  world = new RAPIER.World(gravity);
+
+  // --- Scene Setup ---
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(10, 10, 15);
+  
+  // --- 1. ADD AUDIO LISTENER ---
+  // This is the "ears" of your scene. Attach it to the camera.
+  const listener = new THREE.AudioListener();
+  camera.add(listener);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  document.body.innerHTML = "";
+  document.body.appendChild(renderer.domElement);
 
   // --- Debugger & Controls ---
   debugRenderer = new CustomRapierDebugRenderer(scene, world);
@@ -106,10 +130,8 @@ const { camera, renderer, controls } = initCamera(scene);
     animateIslandElements(dt);
 
     updatePlayer(dt);
-
-    // Update camera to follow player with 360-degree orbit
-    updateCameraFollow(camera, player?.model, DEBUG);
-
+    world.step();
+    controls.update();
 
     // Sync Player Visuals
     if (player.body && player.model) {
@@ -153,4 +175,4 @@ const { camera, renderer, controls } = initCamera(scene);
   }
 
   return cleanup;
-} 
+}

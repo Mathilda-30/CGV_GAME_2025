@@ -1,128 +1,30 @@
 import * as THREE from 'three';
 import { initInput, keys } from './input.js';
-import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer } from './ui.js';
+import { showHUD, updateHUD, resetCounter, getCounter, startTimer, stopTimer, isTimerPaused } from './ui.js';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import { Player } from './player2.js'; 
-import { initCamera, updateCameraFollow } from './camera.js';
-import { createCrystals, updateCrystals } from './crystal.js';
-import { showMenu } from './menu.js';
-
 
 export function startLevel1(onComplete) {
-  const DEBUG = false;
   // === Scene Setup ===
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87ceeb);
   scene.fog = new THREE.Fog(0xe6c79c, 30, 120);
 
-const { camera, renderer, controls } = initCamera(scene);
-// -------------------------
-// 🔊 Global Background Sound (Level 2)
-// -------------------------
-const listener = new THREE.AudioListener();
-const sound = new THREE.Audio(listener);
+  const camera = new THREE.PerspectiveCamera(
+    75, window.innerWidth / window.innerHeight, 0.1, 1000
+  );
+  camera.position.set(0, 10, 30);
 
-// Add the listener to the camera so 3D sound works properly
-camera.add(listener);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.innerHTML = '';
+  document.body.appendChild(renderer.domElement);
 
-const audioLoader = new THREE.AudioLoader();
-audioLoader.load('./sound/Desert_sound.mp3', buffer => {
-    sound.setBuffer(buffer);
-    sound.setLoop(true);          // keep replaying forever
-    sound.setVolume(0.5);         // adjust loudness (0.0–1.0)
-    sound.play();
-}, undefined, err => {
-    console.error('Error loading Desert_sound.mp3:', err);
-});
-
-
-resetCounter();
-showHUD();
-
-startTimer(180, () => {
-  console.log("Time’s up!");
-  cleanup();
-  stopTimer();
-
-  // === Popup Overlay ===
-  const overlay = document.createElement('div');
-  Object.assign(overlay.style, {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    background: 'rgba(0, 0, 0, 0.7)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'white',
-    fontFamily: 'sans-serif',
-    zIndex: 10000,
-  });
-
-  const box = document.createElement('div');
-  Object.assign(box.style, {
-    background: 'rgba(0, 0, 0, 0.85)',
-    padding: '30px 50px',
-    borderRadius: '16px',
-    textAlign: 'center',
-    boxShadow: '0 0 20px rgba(255,255,255,0.3)',
-  });
-
-  const msg = document.createElement('h2');
-  msg.textContent = '⏰ Time’s Up!';
-  msg.style.marginBottom = '20px';
-
-  const restartBtn = document.createElement('button');
-  restartBtn.textContent = '🔁 Restart Level';
-  Object.assign(restartBtn.style, {
-    padding: '10px 20px',
-    margin: '10px',
-    fontSize: '18px',
-    cursor: 'pointer',
-    border: 'none',
-    borderRadius: '8px',
-    background: '#4CAF50',
-    color: 'white',
-  });
-
-  const menuBtn = document.createElement('button');
-  menuBtn.textContent = '🏠 Go to Menu';
-  Object.assign(menuBtn.style, {
-    padding: '10px 20px',
-    margin: '10px',
-    fontSize: '18px',
-    cursor: 'pointer',
-    border: 'none',
-    borderRadius: '8px',
-    background: '#f44336',
-    color: 'white',
-  });
-
-  // === Button Actions ===
-  restartBtn.addEventListener('click', () => {
-    overlay.remove();
-    startLevel1(onComplete);
-  });
-
-  menuBtn.addEventListener('click', () => {
-    overlay.remove();
-    cleanup();
-    showMenu(() => startLevel1(onComplete)); // Return to menu
-  });
-
-  box.appendChild(msg);
-  box.appendChild(restartBtn);
-  box.appendChild(menuBtn);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-});
-
-
-
-  
   // === Lighting ===
   const sunlight = new THREE.DirectionalLight(0xffffff, 1.4);
   sunlight.position.set(30, 40, -40);
@@ -186,7 +88,9 @@ startTimer(180, () => {
 
   const terrain = new THREE.Mesh(terrainGeometry, sandMaterial);
   terrain.receiveShadow = true;
-  scene.add(terrain); 
+  scene.add(terrain);
+
+  const raycaster = new THREE.Raycaster();
 
   // === ROCKS ===
   const rockGeo = new THREE.IcosahedronGeometry(0.6, 1);
@@ -252,22 +156,59 @@ startTimer(180, () => {
     cacti.push(cactus);
   }
 
-// Place randomly across desert
-for (let i = 0; i < 10; i++) {
-  createCactus((Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200);
-}
+  function placeCactus() {
+    const x = (Math.random() - 0.5) * 250;
+    const z = (Math.random() - 0.5) * 250;
+    raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+    const hit = raycaster.intersectObject(terrain);
+    if (hit.length > 0) {
+      const y = hit[0].point.y;
+      createCactus(x, y, z);
+    }
+  }
+  for (let i = 0; i < 15; i++) placeCactus();
 
+  // === PLAYER ===
+  const player = new Player(scene, new THREE.Vector3(0, 0, 0));
 
+  // === CRYSTALS ===
+  let crystals = [];
+  const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x00ffff,
+    emissive: 0x00ffff,
+    emissiveIntensity: 1,
+  });
 
-   const player = new Player(scene, new THREE.Vector3(0, 0, 0));
-    player.camera = camera; // attach camera for relative movement
-  
+  const positions = [
+    [3, -2],
+    [-4, 1],
+    [0, -6],
+    [6, 3],
+    [-6, -4],
+  ];
 
-  const { crystals, crystalPositions } = createCrystals(scene);
+  positions.forEach(([x, z]) => {
+    raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+    const hit = raycaster.intersectObject(terrain);
+    const y = hit.length > 0 ? hit[0].point.y + 0.5 : 0.5;
+    const c = new THREE.Mesh(crystalGeo, crystalMat.clone());
+    c.position.set(x, y, z);
+    c.castShadow = true;
+    scene.add(c);
+    crystals.push(c);
+  });
 
   // === Input + HUD ===
   initInput();
-  
+  resetCounter();
+  showHUD();
+
+//timer 
+startTimer(15, () => {
+  endGame(false); 
+});
+
 
   const clock = new THREE.Clock();
   let animId;
@@ -283,31 +224,101 @@ for (let i = 0; i < 10; i++) {
     return;
   }
 
+     player.update(dt);
     player.update(dt);
+    const playerPos = player.model.position;
+
+    // --- Ground Alignment ---
+    raycaster.set(
+      new THREE.Vector3(playerPos.x, playerPos.y + 5, playerPos.z),
+      new THREE.Vector3(0, -1, 0)
+    );
+    const intersects = raycaster.intersectObject(terrain);
+    if (intersects.length > 0) {
+      const groundY = intersects[0].point.y;
+      const targetY = groundY + 0.02;
+      player.model.position.y = THREE.MathUtils.lerp(player.model.position.y, targetY, 0.4);
+      if (player.velocity && player.velocity.y < 0) player.velocity.y = 0;
+    } else {
+      player.model.position.y = 0.5; // fallback if off-terrain
+    }
+
+    // --- Keep player inside terrain bounds ---
+    const BOUNDS = 140;
+    player.model.position.x = THREE.MathUtils.clamp(player.model.position.x, -BOUNDS, BOUNDS);
+    player.model.position.z = THREE.MathUtils.clamp(player.model.position.z, -BOUNDS, BOUNDS);
 
     // --- Camera Follow ---
     camera.position.lerp(
-        player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
-        0.1
+      player.model.position.clone().add(new THREE.Vector3(0, 3, 8)),
+      0.1
     );
     camera.lookAt(player.model.position);
 
-    // Replace crystal update code with:
-    updateCrystals(crystals, player, scene, (i) => {
-  updateHUD(getCounter() + 1);
-  if (getCounter() === crystalPositions.length) {
-    stopTimer(); // stop the countdown when all crystals collected
-    setTimeout(() => {
-      cleanup();
-      onComplete();
-    }, 600);
-  }
-});
+    // --- Crystals Rotation + Collection ---
+    crystals.forEach((c, i) => {
+      if (!c) return;
+      c.rotation.y += 0.02;
+      if (playerPos.distanceTo(c.position) < 1) {
+        scene.remove(c);
+        crystals[i] = null;
+        updateHUD(getCounter() + 1);
+        if (getCounter() + 1 === positions.length) {
+          setTimeout(() => {
+            cleanup();
+            onComplete();
+          }, 800);
+        }
+      }
+    });
 
+   // --- Obstacle Collision Handling ---
+const obstacles = [...rocks, ...cacti];
+const playerRadius = 1.0; // adjust based on your player size
 
-    updateCameraFollow(camera, player?.model, DEBUG);
-    renderer.render(scene, camera);
+// Save last safe position before applying movement
+if (!player.lastSafePos) {
+  player.lastSafePos = playerPos.clone();
 }
+
+// Check for collision
+let collided = false;
+
+for (const obs of obstacles) {
+  if (!obs) continue;
+
+  const dx = playerPos.x - obs.position.x;
+  const dz = playerPos.z - obs.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+
+  const obsRadius = (obs.scale.x || 1) * 0.5;
+  const minDist = playerRadius + obsRadius;
+
+  if (dist < minDist) {
+    collided = true;
+    break; // we only need one obstacle to block the player
+  }
+}
+
+if (collided) {
+  // Revert to last safe position — player stops completely
+  playerPos.copy(player.lastSafePos);
+
+  if (player.velocity) {
+    player.velocity.x = 0;
+    player.velocity.z = 0;
+  }
+} else {
+  // Update last safe position if no collision
+  player.lastSafePos.copy(playerPos);
+}
+
+
+
+
+    renderer.render(scene, camera);
+  }
+
   animate();
 
    // === End Game Logic ===
