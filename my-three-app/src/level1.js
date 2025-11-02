@@ -270,6 +270,14 @@ for (let i = 0; i < 20; i++) {
       rock.rotation.y = Math.random() * Math.PI;
       rock.castShadow = true;
       rock.receiveShadow = true;
+      // --- Align rock with terrain height ---
+      raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+      const groundHit = raycaster.intersectObject(terrain);
+      if (groundHit.length > 0) {
+        const groundY = groundHit[0].point.y;
+        rock.position.y = groundY + 0.3; // slightly above ground
+      }
+
       scene.add(rock);
       rocks.push(rock);
     }
@@ -311,6 +319,14 @@ function createCactus(x, z) {
   cactus.add(rightArm);
 
   cactus.position.set(x, 0, z);
+  // --- Align cactus with terrain height ---
+raycaster.set(new THREE.Vector3(x, 100, z), new THREE.Vector3(0, -1, 0));
+const groundHit = raycaster.intersectObject(terrain);
+if (groundHit.length > 0) {
+  const groundY = groundHit[0].point.y;
+  cactus.position.y = groundY; // base touches ground
+}
+
   scene.add(cactus);
   cacti.push(cactus);
 }
