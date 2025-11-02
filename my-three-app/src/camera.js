@@ -1,39 +1,92 @@
-// camera.js
+// src/camera.js
 import * as THREE from 'three';
-// Import our new player object
-import { player } from './player3.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// The ideal offset from the player (X, Y, Z)
-// 0_X = centered, 5_Y = 5 units up, 15_Z = 15 units behind
-const idealOffset = new THREE.Vector3(0, 5, 15);
+let cameraRotation = new THREE.Vector2(0, 0); // yaw (left/right), pitch (up/down)
+const rotationSpeed = 0.02;
+const minPitch = -0.6;
+const maxPitch = 0.6;
 
-// How fast the camera "catches up" to the player.
-// Lower value = smoother/slower. Higher value = snappier.
-const cameraMoveSpeed = 0.05;
+/**
+ * Initializes and returns a PerspectiveCamera, renderer, and OrbitControls.
+ * @param {THREE.Scene} scene - The scene to render.
+ * @returns {{ camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, controls: OrbitControls }}
+ */
+export function initCamera(scene) {
+    const camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+    camera.position.set(0, 5, 14);
 
-// We'll use these vectors in the loop, defining them here saves resources
-const targetPosition = new THREE.Vector3();
-const targetLookAt = new THREE.Vector3();
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-export function updateCamera(camera) {
-  // If the player model hasn't loaded, don't do anything
-  if (!player.model) return;
+    document.body.innerHTML = '';
+    document.body.appendChild(renderer.domElement);
 
-  // 1. Calculate the ideal camera position
-  // Start with the player's position
-  targetPosition.copy(player.model.position);
-  // Add the offset
-  targetPosition.add(idealOffset);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enabled = false; // disable for gameplay
 
-  // 2. Smoothly move the camera towards the ideal position
-  camera.position.lerp(targetPosition, cameraMoveSpeed);
+    // Handle window resize
+    function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', onResize);
 
-  // 3. Calculate the ideal "look at" point
-  // Start with the player's position
-  targetLookAt.copy(player.model.position);
-  // Move it up slightly (so we look at their chest, not their feet)
-  targetLookAt.y += 2.0;
+    // --- Arrow Key Controls for Manual Rotation ---
+    window.addEventListener('keydown', (e) => {
+        switch (e.code) {
+            case 'ArrowLeft':
+                cameraRotation.x -= rotationSpeed;
+                break;
+            case 'ArrowRight':
+                cameraRotation.x += rotationSpeed;
+                break;
+            case 'ArrowUp':
+                cameraRotation.y = Math.min(maxPitch, cameraRotation.y + rotationSpeed);
+                break;
+            case 'ArrowDown':
+                cameraRotation.y = Math.max(minPitch, cameraRotation.y - rotationSpeed);
+                break;
+        }
+    });
 
-  // 4. Make the camera look at that point
-  camera.lookAt(targetLookAt);
+    return { camera, renderer, controls };
+}
+
+/**
+ * Smoothly follows a target (usually the player model)
+ */
+export function updateCameraFollow(camera, target, DEBUG = false) {
+    if (target) {
+        const distance = 8.0; // fixed distance behind player
+        const height = 3.0;   // fixed height above player
+
+        // Convert yaw (x) and pitch (y) into a spherical offset
+        const horizontalDist = distance * Math.cos(cameraRotation.y);
+        const offset = new THREE.Vector3(
+            Math.sin(cameraRotation.x) * horizontalDist,
+            height + distance * Math.sin(cameraRotation.y),
+            Math.cos(cameraRotation.x) * horizontalDist
+        );
+
+        const desiredPosition = target.position.clone().add(offset);
+
+        // Smoothly move camera to the desired position
+        camera.position.lerp(desiredPosition, 0.12);
+
+        // Make camera look at the player
+        camera.lookAt(target.position);
+
+        if (DEBUG) console.log('Camera follow pos:', target.position);
+    }
 }

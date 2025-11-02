@@ -1,42 +1,115 @@
-// src/crystal.js
 import * as THREE from 'three';
-import { setCounter } from './ui.js';
 
-let crystals = [];
-let collected = 0;
-let onAllCollected = null;
+/**
+ * Creates and adds glowing crystals to the scene.
+ * @param {THREE.Scene} scene
+ * @param {number} count Number of crystals to spawn
+ * @param {object} bounds { xMin, xMax, zMin, zMax, y } for spawn area
+ * @returns {{ crystals: THREE.Mesh[], crystalPositions: number[][] }}
+ */
 
-export function initCrystals(scene, positions, callback) {
-  crystals = [];
-  collected = 0;
-  onAllCollected = callback;
 
-  const geo = new THREE.IcosahedronGeometry(0.4, 0);
-  positions.forEach(p => {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0xaa00aa });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(...p);
-    scene.add(mesh);
-    crystals.push(mesh);
-  });
+export function createCrystals(scene) {
+    const crystals = [];
+    const crystalPositions = [];
 
-  setCounter(0);
+    const NUM_CRYSTALS = 10;
+    const MAX_ATTEMPTS = 200;
+    const caveRadius = 25;
+
+    // Collect rock meshes
+    const rocks = [];
+    scene.traverse(obj => {
+        if (obj.name === 'rock') rocks.push(obj);
+    });
+
+    // Helper: ensure we don't overlap rocks
+    function tooCloseToRocks(x, z) {
+        for (let r of rocks) {
+            const dist = Math.hypot(x - r.position.x, z - r.position.z);
+            if (dist < 2.5) return true;
+        }
+        return false;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const down = new THREE.Vector3(0, -1, 0);
+
+    const crystalGeo = new THREE.IcosahedronGeometry(0.4, 0);
+    const crystalMat = new THREE.MeshStandardMaterial({
+        color: 0x44e6ff,
+        emissive: 0x00aaff,
+        emissiveIntensity: 1.8,
+        roughness: 0.2,
+        metalness: 0.1,
+    });
+
+    const groundObjects = rocks.filter(r => r.position.y < 2);
+
+    let placed = 0, tries = 0;
+    while (placed < NUM_CRYSTALS && tries < MAX_ATTEMPTS) {
+        tries++;
+
+        const x = THREE.MathUtils.randFloatSpread(40);
+        const z = THREE.MathUtils.randFloatSpread(40);
+
+        const dist = Math.hypot(x, z);
+        if (dist > caveRadius - 2) continue;
+        if (tooCloseToRocks(x, z)) continue;
+
+        // Raycast down to find floor height (approx)
+        raycaster.set(new THREE.Vector3(x, 15, z), down);
+        const intersects = raycaster.intersectObjects(groundObjects, true);
+        let y = 0.4;
+        if (intersects.length > 0) {
+            y = intersects[0].point.y + 0.4;
+        }
+
+        const crystal = new THREE.Mesh(crystalGeo, crystalMat.clone());
+        crystal.position.set(x, y, z);
+        crystal.castShadow = true;
+        crystal.name = 'crystal';
+        scene.add(crystal);
+
+        // Add subtle glow
+        const light = new THREE.PointLight(0x33ccff, 1.2, 6);
+        light.position.set(x, y + 0.5, z);
+        scene.add(light);
+
+        crystals.push(crystal);
+        crystalPositions.push([x, y, z]);
+        placed++;
+        console.log(` Crystal placed at (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`);
+    }
+
+    if (placed === 0) {
+        console.warn(' No crystals placed — check spawn area or floor geometry!');
+    }
+
+    return { crystals, crystalPositions };
 }
 
-export function updateCrystals(player) {
-  crystals.forEach((c, i) => {
-    if (!c) return;
-    c.rotation.y += 0.02;
 
-    if (player.mesh.position.distanceTo(c.position) < 1) {
-      c.visible = false;
-      crystals[i] = null;
-      collected++;
-      setCounter(collected);
+/**
+ * Updates crystals each frame (rotation + pickup detection)
+ */
+export function updateCrystals(crystals, player, scene, onPickup) {
+    crystals.forEach((c, i) => {
+        if (!c) return;
+        c.rotation.y += 0.03;
 
-      if (collected === crystals.length && onAllCollected) {
-        onAllCollected();
-      }
-    }
-  });
+        if (player?.model && player.model.position.distanceTo(c.position) < 1.0) {
+            // Remove from scene
+            scene.remove(c);
+            crystals[i] = null;
+
+            //  Play shine sound
+            const audio = new Audio('./sound/shine.mp3');
+            audio.volume = 0.6; // adjust volume if needed
+            audio.play().catch(err => console.warn(' Crystal sound failed:', err));
+
+            // Update counter or trigger callback
+            if (onPickup) onPickup(i);
+        }
+    });
 }

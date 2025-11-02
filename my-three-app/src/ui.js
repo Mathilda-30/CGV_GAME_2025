@@ -1,35 +1,62 @@
+// src/ui.js
 let hud, counter = 0;
-// === TIMER LOGIC ===
 
+// === TIMER LOGIC ===
 let totalTime = 15;
 let timeLeft = totalTime;
 let lastUpdate = performance.now();
 let isPaused = false;
-let timerRunning = true;
+let timerRunning = false;
 let timerRAF = null;
 let onTimerEnd = null;
 let lastDisplayedSecond = null;
 
 let pauseOverlay = null;
+let pauseBtn = null;
 
+// === HUD (Crystals) ===
+// === HUD (Crystals) ===
 export function showHUD() {
+  const oldHud = document.getElementById('crystal-hud');
+  if (oldHud) oldHud.remove();
+
   hud = document.createElement('div');
-  hud.style.position = 'absolute';
-  hud.style.top = '10px';
-  hud.style.left = '10px';
-  hud.style.color = 'white';
-  hud.style.fontFamily = 'sans-serif';
-  hud.innerHTML = 'Crystals: 0';
+  hud.id = 'crystal-hud';
+  Object.assign(hud.style, {
+    position: 'fixed',
+    top: '10px',
+    left: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    background: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: '10px',
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)',
+    color: 'white',
+    fontFamily: 'sans-serif',
+    fontSize: '18px',
+    zIndex: 9999,
+  });
+
+  const icon = document.createElement('span');
+  icon.textContent = '💎'; // crystal emoji
+  icon.style.fontSize = '20px';
+
+  const text = document.createElement('span');
+  text.id = 'crystal-count';
+  text.textContent = '0';
+
+  hud.appendChild(icon);
+  hud.appendChild(text);
   document.body.appendChild(hud);
 }
 
 export function updateHUD(val) {
   counter = val;
-  if (hud) hud.innerHTML = `Crystals: ${counter}`;
+  const el = document.getElementById('crystal-count');
+  if (el) el.textContent = counter;
 }
-
-export function resetCounter() { counter = 0; }
-export function getCounter() { return counter; }
 
 // === TIMER UI ===
 function createTimerUI() {
@@ -42,30 +69,52 @@ function createTimerUI() {
     position: 'fixed',
     top: '12px',
     right: '12px',
-    padding: '8px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    background: 'rgba(0,0,0,0.6)',
+    borderRadius: '10px',
+    boxShadow: '0 0 10px rgba(0,0,0,0.5)',
     color: 'white',
     fontFamily: 'sans-serif',
     fontSize: '18px',
     zIndex: 9999,
     pointerEvents: 'none',
   });
-  timerEl.textContent = `Time: ${Math.floor(timeLeft)}s`;
+
+  const icon = document.createElement('span');
+  icon.textContent = '⏰';
+  icon.style.fontSize = '20px';
+
+  const text = document.createElement('span');
+  text.id = 'timer-text';
+  text.textContent = `${Math.floor(timeLeft)}s`;
+
+  timerEl.appendChild(icon);
+  timerEl.appendChild(text);
   document.body.appendChild(timerEl);
 }
 
 function updateTimerUI(seconds) {
-  const timerEl = document.getElementById('game-timer');
+  const timerEl = document.getElementById('timer-text');
   const currentSecond = Math.max(0, Math.floor(seconds));
   if (timerEl && currentSecond !== lastDisplayedSecond) {
-    timerEl.textContent = `Time: ${currentSecond}s`;
+    timerEl.textContent = `${currentSecond}s`;
     lastDisplayedSecond = currentSecond;
   }
 }
 
+
+
+export function resetCounter() { counter = 0; }
+export function getCounter() { return counter; }
+
+
+
 // === MAIN TIMER LOOP ===
 function timerLoop() {
   if (!timerRunning) return;
-
   const now = performance.now();
 
   if (!isPaused) {
@@ -83,16 +132,13 @@ function timerLoop() {
 
     updateTimerUI(timeLeft);
   } else {
-    // Keep updating lastUpdate to prevent big jumps after resume
     lastUpdate = now;
   }
 
   timerRAF = requestAnimationFrame(timerLoop);
 }
 
-// === PAUSE BUTTON ===
-let pauseBtn = null;
-
+// === PAUSE UI ===
 function createPauseButton() {
   if (pauseBtn) pauseBtn.remove();
 
@@ -107,7 +153,7 @@ function createPauseButton() {
     background: 'rgba(0,0,0,0.6)',
     color: 'white',
     fontFamily: 'sans-serif',
-    fontSize: '10px',
+    fontSize: '12px',
     border: 'none',
     borderRadius: '6px',
     cursor: 'pointer',
@@ -123,7 +169,6 @@ function createPauseButton() {
   document.body.appendChild(pauseBtn);
 }
 
-// === PAUSE OVERLAY ===
 function createPauseOverlay() {
   pauseOverlay = document.createElement('div');
   pauseOverlay.id = 'pause-overlay';
@@ -153,10 +198,9 @@ function togglePauseOverlay(show) {
   pauseOverlay.style.opacity = show ? '1' : '0';
 }
 
-// === PUBLIC FUNCTIONS ===
+// === PUBLIC TIMER CONTROL ===
 export function startTimer(durationSeconds, onEndCallback) {
-  stopTimer(); // ensure clean start
-
+  stopTimer(); // reset first
   totalTime = durationSeconds;
   timeLeft = durationSeconds;
   lastUpdate = performance.now();
@@ -186,16 +230,11 @@ export function resumeTimer() {
 export function stopTimer() {
   timerRunning = false;
   cancelAnimationFrame(timerRAF);
-  const timerEl = document.getElementById('game-timer');
-  if (timerEl) timerEl.remove();
-  if (pauseBtn) pauseBtn.remove();
-  if (pauseOverlay) pauseOverlay.remove();
+  ['game-timer', 'pause-btn', 'pause-overlay'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  });
 }
 
-export function isTimerPaused() {
-  return isPaused;
-}
-
-export function getTimeLeft() {
-  return Math.max(0, Math.floor(timeLeft));
-}
+export function isTimerPaused() { return isPaused; }
+export function getTimeLeft() { return Math.max(0, Math.floor(timeLeft)); }
