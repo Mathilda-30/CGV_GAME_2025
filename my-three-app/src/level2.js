@@ -26,7 +26,7 @@ export function startLevel2(onComplete) {
 
     const { camera, renderer, controls } = initCamera(scene);
     // -------------------------
-// 🔊 Global Background Sound (Level 2)
+//  Global Background Sound (Level 2)
 // -------------------------
 const listener = new THREE.AudioListener();
 const sound = new THREE.Audio(listener);
@@ -226,7 +226,7 @@ resetCounter();
 // Falling Rocks (same style as stationary rocks)
 // -------------------------
 
-const newObstacles = []; // <-- declare BEFORE using it
+const newObstacles = []; // 
 
 const fallingRocks = [];
 const rockTex = textureLoader.load('./textures/cave.jpg');
@@ -464,7 +464,7 @@ function triggerFall() {
         bowl.position.y = 1.1;
         g.add(bowl);
 
-        // 🔥 Flame Sprite
+        //  Flame Sprite
         const flameTexture = new THREE.TextureLoader().load('./textures/torch_flame.png');
         flameTexture.minFilter = THREE.LinearFilter;
         flameTexture.magFilter = THREE.LinearFilter;
@@ -606,7 +606,7 @@ function triggerFall() {
         geom.scale(scale, scale, 1);
         geom.rotateZ(Math.random() * Math.PI);
 
-        // ✅ Fix UV stretching here
+        //  Fix UV stretching here
         fixUVMapping(geom, 3); // try changing '3' to adjust tiling density
 
         const mud = new THREE.Mesh(geom, mudPitMat);
@@ -664,10 +664,10 @@ function triggerFall() {
         player.setBoundaries(boundaries); // Cave walls and tunnels
         // water removed — no setWaterColliders call
 
-        // ✅ Set terrain for height detection
+        //  Set terrain for height detection
         player.setTerrain(floor);
 
-        // ✅ Set player initial spawn height based on terrain
+        //  Set player initial spawn height based on terrain
         const spawnX = 0, spawnZ = 6;
         const spawnY = player.getTerrainHeightAt(spawnX, spawnZ) + 0.3; // offset above ground
         if (player.model) player.model.position.set(spawnX, spawnY, spawnZ);
@@ -802,7 +802,7 @@ animate();
       else obj.material.dispose?.();
     }
   });
-  // ⛔ Do not remove the renderer's DOM element or clear document.body
+  
 }
 
 
